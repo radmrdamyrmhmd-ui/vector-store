@@ -1,0 +1,31 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "DATABASE_URL",
+      "description": "Local Postgres URL for the compose stack (defaults file).",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": false
+    },
+    {
+      "name": "JWT_SECRET",
+      "description": "Signs the session cookie. Replace with a strong random value outside development.",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": false
+    },
+    {
+      "name": "ADMIN_EMAIL",
+      "description": "Email of the seeded store owner account.",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": false
+    },
+    {
+      "name": "ADMIN_PASSWORD",
+      "description": "Password of the seeded store owner account (development default).",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": false
+    }
+  ]
+}
