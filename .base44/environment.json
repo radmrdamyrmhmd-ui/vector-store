@@ -1,0 +1,18 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "JWT_SECRET",
+      "description": "کلید امضای نشست مدیران (به‌صورت خودکار تولید شده است)",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": true
+    },
+    {
+      "name": "PAYMENT_MERCHANT_ID",
+      "description": "شناسه پذیرنده درگاه زرین‌پال؛ بدون آن پرداخت آنلاین غیرفعال است و کمک‌ها فقط به‌صورت درخواست ثبت می‌شوند",
+      "requiredAtBoot": false
+    }
+  ]
+}

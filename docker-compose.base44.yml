@@ -1,0 +1,101 @@
+name: app
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: on-failure
+    environment:
+      POSTGRES_USER: hamrahan
+      POSTGRES_PASSWORD: hamrahan
+      POSTGRES_DB: hamrahan
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hamrahan -d hamrahan']
+      interval: 5s
+      timeout: 4s
+      retries: 20
+
+  api:
+    image: node:22-slim
+    restart: on-failure
+    working_dir: /workspace/server
+    command:
+      - sh
+      - -ec
+      - |
+        cd /workspace && npm install --no-audit --no-fund
+        cd /workspace/server && npm install --no-audit --no-fund
+        exec node --watch src/index.js
+    environment:
+      - NODE_ENV=development
+      - PORT=8000
+      - DATABASE_URL=postgres://hamrahan:hamrahan@db:5432/hamrahan
+      - UPLOAD_DIR=/app/uploads
+      - PUBLIC_BASE_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+      - BASE44_PREVIEW_MODE
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    volumes:
+      - ${BASE44_PROJECT_ROOT}:/workspace
+      - api_modules:/workspace/node_modules
+      - api_modules_nested:/workspace/server/node_modules
+      - uploads:/app/uploads
+    ports:
+      - '8000:8000'
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:8000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+  web:
+    image: node:22-slim
+    restart: on-failure
+    working_dir: /workspace
+    command:
+      - sh
+      - -ec
+      - |
+        npm install --no-audit --no-fund
+        exec npx vite --host 0.0.0.0 --port 3000
+    environment:
+      - NODE_ENV=development
+      - API_PROXY_TARGET=http://api:8000
+      - BASE44_PREVIEW_MODE
+      - BASE44_SANDBOX_HOST_DOMAIN
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+    volumes:
+      - ${BASE44_PROJECT_ROOT}:/workspace
+      - web_modules:/workspace/node_modules
+    ports:
+      - '3000:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+volumes:
+  db-data:
+  api_modules:
+  api_modules_nested:
+  web_modules:
+  uploads:
