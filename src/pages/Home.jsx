@@ -11,8 +11,8 @@ import {
 } from 'lucide-react'
 import { useSettings, useSite } from '../lib/site.jsx'
 import { Artwork } from '../components/Art.jsx'
-import { Badge, Button, Empty, SectionHead } from '../components/ui.jsx'
-import { ActivityCard, ImpactCard, ProjectCard, StoryCard } from '../components/cards.jsx'
+import { Button, Empty, SectionHead } from '../components/ui.jsx'
+import { ActivityCard, ProjectCard, StoryCard } from '../components/cards.jsx'
 import { NewsletterForm } from '../components/forms.jsx'
 import Reveal from '../components/Reveal.jsx'
 import { compactMoney, formatDate, num, paragraphs } from '../lib/format.js'
@@ -163,7 +163,7 @@ function ActivitiesSection() {
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {activities.map((activity, index) => (
             <Reveal key={activity.slug} delay={index * 60}>
-              <ActivityCard activity={activity} index={index} />
+              <ActivityCard activity={activity} />
             </Reveal>
           ))}
         </div>

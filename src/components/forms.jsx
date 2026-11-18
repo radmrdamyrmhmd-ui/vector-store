@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../lib/api.js'
-import { digitsOnly } from '../lib/format.js'
+import { reportClientError } from '../lib/errors.js'
+import { isValidPhone, phoneInputValue } from '../lib/phone.js'
 import { Button, Field, Input, Notice, Textarea } from './ui.jsx'
 
 const INTEREST_FALLBACK = [
@@ -36,6 +37,8 @@ export function VolunteerForm({ interests = INTEREST_FALLBACK }) {
 
   async function handleSubmit(event) {
     event.preventDefault()
+    // A second submit while the first request is in flight would create a duplicate record.
+    if (loading) return
     setError('')
     setSuccess('')
     if (form.full_name.trim().length < 3) return setError('نام و نام خانوادگی را کامل وارد کنید.')
@@ -55,7 +58,9 @@ export function VolunteerForm({ interests = INTEREST_FALLBACK }) {
       setForm({ full_name: '', phone: '', email: '', city: '', skills: '', note: '' })
       setSelected([])
     } catch (err) {
-      setError(err.message)
+      reportClientError('volunteer-form', err)
+      // The entered values stay in the form so nothing has to be retyped.
+      setError(err?.message || 'ارسال درخواست ناموفق بود. لطفاً دوباره تلاش کنید.')
     } finally {
       setLoading(false)
     }
@@ -77,7 +82,7 @@ export function VolunteerForm({ interests = INTEREST_FALLBACK }) {
             id="vol-phone"
             value={form.phone}
             onChange={(event) =>
-              setForm((prev) => ({ ...prev, phone: digitsOnly(event.target.value).slice(0, 11) }))
+              setForm((prev) => ({ ...prev, phone: phoneInputValue(event.target.value) }))
             }
             inputMode="tel"
             autoComplete="tel"
@@ -217,6 +222,8 @@ export function ContactForm() {
 
   async function handleSubmit(event) {
     event.preventDefault()
+    // A second submit while the first request is in flight would create a duplicate message.
+    if (loading) return
     setError('')
     setSuccess('')
     if (form.name.trim().length < 3) return setError('نام خود را کامل وارد کنید.')
@@ -233,7 +240,9 @@ export function ContactForm() {
       setSuccess(data.message)
       setForm({ name: '', phone: '', email: '', subject: '', message: '' })
     } catch (err) {
-      setError(err.message)
+      reportClientError('contact-form', err)
+      // The entered values stay in the form so nothing has to be retyped.
+      setError(err?.message || 'ارسال پیام ناموفق بود. لطفاً دوباره تلاش کنید.')
     } finally {
       setLoading(false)
     }
@@ -255,7 +264,7 @@ export function ContactForm() {
             id="contact-phone"
             value={form.phone}
             onChange={(event) =>
-              setForm((prev) => ({ ...prev, phone: digitsOnly(event.target.value).slice(0, 11) }))
+              setForm((prev) => ({ ...prev, phone: phoneInputValue(event.target.value) }))
             }
             inputMode="tel"
             autoComplete="tel"

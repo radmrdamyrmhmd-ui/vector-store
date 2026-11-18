@@ -127,7 +127,7 @@ router.post('/upload', (req, res) => {
         ]
       )
       res.status(201).json({ url, media: inserted.rows[0] })
-    } catch (err) {
+    } catch {
       res.status(201).json({ url })
     }
   })

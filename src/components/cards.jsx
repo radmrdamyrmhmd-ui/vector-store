@@ -27,7 +27,7 @@ const STATUS_LABELS = {
   planned: 'در برنامه‌ریزی',
 }
 
-export function ActivityCard({ activity, index = 0 }) {
+export function ActivityCard({ activity }) {
   const Icon = ACTIVITY_ICONS[activity.icon] || HeartHandshake
   return (
     <Link

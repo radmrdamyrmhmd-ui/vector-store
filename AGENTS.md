@@ -53,4 +53,15 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:3000/
 Admin flow: `/admin` → login → projects/stories/activities/reports/settings; lists refetch only on
 mount, so re-enter the route (or reload) after a mutation made outside the forms.
 
-No test runner or linter is configured in this repo.
+## Tests and lint
+
+Vitest + React Testing Library (jsdom) and ESLint 9 (flat config) are configured.
+
+```bash
+docker exec app-web-1 sh -c "cd /workspace && npm test"      # vitest run
+docker exec app-web-1 sh -c "cd /workspace && npm run lint"  # eslint src server/src
+```
+
+`src/lib/phone.js` is the single source of phone validation on the client
+(`isValidPhone`, `normalizePhone`, `phoneInputValue`); the API keeps its own copy in
+`server/src/routes/public.js`. Tests live next to the code (`*.test.js(x)`).

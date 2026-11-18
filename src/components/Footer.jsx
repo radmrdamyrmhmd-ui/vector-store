@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Instagram, Mail, MapPin, MessageCircle, Phone, Send } from 'lucide-react'
 import {
-  FOOTER_ABOUT_LINKS,
   FOOTER_CONTACT_LINKS,
   FOOTER_LEGAL_LINKS,
   FOOTER_QUICK_LINKS,

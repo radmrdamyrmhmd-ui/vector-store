@@ -24,12 +24,11 @@ export default function Projects() {
 
   const { data, loading, error } = useResource(() => api('/projects'), [])
   const [filter, setFilter] = useState('all')
-  const projects = data || []
 
-  const visible = useMemo(
-    () => (filter === 'all' ? projects : projects.filter((project) => project.status === filter)),
-    [projects, filter]
-  )
+  const visible = useMemo(() => {
+    const projects = data || []
+    return filter === 'all' ? projects : projects.filter((project) => project.status === filter)
+  }, [data, filter])
 
   return (
     <>

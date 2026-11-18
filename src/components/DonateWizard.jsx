@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, CircleCheck, FlaskConical, HandCoins, Lock } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { reportClientError } from '../lib/errors.js'
 import { digitsOnly, money } from '../lib/format.js'
+import { isValidPhone, phoneInputValue } from '../lib/phone.js'
 import { Button, Field, Input, Notice, Select, Textarea } from './ui.jsx'
 
 const PRESETS = [100000, 250000, 500000, 1000000, 2000000]
 const MIN_AMOUNT = 10000
 const MAX_AMOUNT = 500000000
-
-const isValidPhone = (value) => /^0?9\d{9}$/.test(digitsOnly(value))
 
 export default function DonateWizard({ projects = [], initialSlug = '' }) {
   const navigate = useNavigate()
@@ -88,7 +88,8 @@ export default function DonateWizard({ projects = [], initialSlug = '' }) {
       }
       navigate(`/donate/checkout/${data.tracking}`)
     } catch (err) {
-      setError(err.message)
+      reportClientError('donation-form', err)
+      setError(err?.message || 'ثبت کمک ناموفق بود. لطفاً دوباره تلاش کنید.')
     } finally {
       setLoading(false)
     }
@@ -265,7 +266,7 @@ export default function DonateWizard({ projects = [], initialSlug = '' }) {
               <Input
                 id="donor-phone"
                 value={phone}
-                onChange={(event) => setPhone(digitsOnly(event.target.value).slice(0, 11))}
+                onChange={(event) => setPhone(phoneInputValue(event.target.value))}
                 placeholder="09123456789"
                 inputMode="tel"
                 autoComplete="tel"

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { api } from '../../lib/api.js'
 import { useResource } from '../../lib/useResource.js'
-import { Button, Field, Input, Select, Spinner, Textarea } from '../../components/ui.jsx'
+import { Button, Field, Input, Spinner, Textarea } from '../../components/ui.jsx'
 import { AdminHeader, AdminNotice, EmptyRow, Panel, Table } from './parts.jsx'
 import { formatDate, num } from '../../lib/format.js'
 
