@@ -6,12 +6,41 @@ import { Artwork } from '../components/Art.jsx'
 import { Button, Empty, Notice } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import { StoryCard } from '../components/cards.jsx'
+import { SampleTag } from '../components/DemoRibbon.jsx'
 import { formatDate, paragraphs } from '../lib/format.js'
+import { articleJsonLd, breadcrumbJsonLd, useSeo } from '../lib/seo.jsx'
 
 export default function StoryDetail() {
   const { slug } = useParams()
   const { data: story, loading, error } = useResource(() => api(`/stories/${slug}`), [slug])
   const { data: allStories } = useResource(() => api('/stories'), [])
+
+  useSeo({
+    title: story?.title,
+    description: story?.meta_description || story?.excerpt || undefined,
+    path: `/stories/${slug}`,
+    image: story?.image_url || undefined,
+    type: 'article',
+    jsonLd: story
+      ? {
+          '@context': 'https://schema.org',
+          '@graph': [
+            articleJsonLd({
+              title: story.title,
+              description: story.excerpt,
+              published_at: story.published_at,
+              image: story.image_url,
+              path: `/stories/${story.slug}`,
+            }),
+            breadcrumbJsonLd([
+              { label: 'صفحه اصلی', to: '/' },
+              { label: 'اخبار و مقالات', to: '/stories' },
+              { label: story.title, to: `/stories/${story.slug}` },
+            ]),
+          ],
+        }
+      : undefined,
+  })
 
   if (loading) {
     return (
@@ -58,6 +87,10 @@ export default function StoryDetail() {
                 {story.author}
               </span>
             )}
+            {story.category && (
+              <span className="rounded-full bg-white px-2.5 py-0.5 text-[10.5px]">{story.category}</span>
+            )}
+            {story.is_sample && <SampleTag />}
           </div>
         </div>
       </section>

@@ -22,12 +22,17 @@ const INTERESTS = [
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max)
 const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)
 const isPhone = (value) => /^0?9\d{9}$/.test(value.replace(/[\s-]/g, ''))
+// A Persian keyboard produces ۰-۹; every numeric field is normalised first.
+const latinDigits = (value) =>
+  String(value ?? '')
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
 const normalizePhone = (value) => {
-  const digits = value.replace(/[^\d]/g, '')
+  const digits = latinDigits(value).replace(/[^\d]/g, '')
   return digits.startsWith('98') ? `0${digits.slice(2)}` : digits.startsWith('9') ? `0${digits}` : digits
 }
 const toAmount = (value) => {
-  const digits = String(value ?? '').replace(/[^\d]/g, '')
+  const digits = latinDigits(value).replace(/[^\d]/g, '')
   const amount = Number(digits)
   return Number.isFinite(amount) ? amount : 0
 }
@@ -37,20 +42,49 @@ async function getSettings() {
   return result.rows[0]?.value || {}
 }
 
+// Simulated donations are kept out of every public total: they demonstrate the
+// checkout, they are not money received.
 const PROJECT_FIELDS = `
   p.id, p.slug, p.title, p.summary, p.description, p.image_url, p.target_amount,
-  p.location, p.status, p.created_at,
-  COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid'), 0)::bigint AS raised_amount,
-  (SELECT count(*) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid')::int AS donors_count
+  p.location, p.status, p.created_at, p.is_sample, p.meta_description,
+  COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid' AND d.simulated = false), 0)::bigint AS raised_amount,
+  COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid' AND d.simulated = true), 0)::bigint AS simulated_amount,
+  (SELECT count(*) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid' AND d.simulated = false)::int AS donors_count
 `
+
+// Small in-memory flood guard for the public write endpoints.
+const buckets = new Map()
+function tooManyRequests(key, limit, windowMs) {
+  const now = Date.now()
+  const entry = buckets.get(key)
+  if (!entry || now - entry.first > windowMs) {
+    buckets.set(key, { count: 1, first: now })
+    return false
+  }
+  entry.count += 1
+  return entry.count > limit
+}
+function guard(action, limit, windowMs) {
+  return (req, res, next) => {
+    const key = `${action}:${req.ip || 'unknown'}`
+    if (tooManyRequests(key, limit, windowMs)) {
+      return res
+        .status(429)
+        .json({ error: 'تعداد درخواست‌ها زیاد است. چند دقیقه بعد دوباره تلاش کنید.' })
+    }
+    next()
+  }
+}
 
 async function impact() {
   const settings = await getSettings()
   const totals = await query(`
     SELECT
-      COALESCE(SUM(amount) FILTER (WHERE status = 'paid'), 0)::bigint AS total_received,
-      count(*) FILTER (WHERE status = 'paid')::int AS paid_donations,
-      max(paid_at) FILTER (WHERE status = 'paid') AS last_paid_at
+      COALESCE(SUM(amount) FILTER (WHERE status = 'paid' AND simulated = false), 0)::bigint AS total_received,
+      count(*) FILTER (WHERE status = 'paid' AND simulated = false)::int AS paid_donations,
+      max(paid_at) FILTER (WHERE status = 'paid' AND simulated = false) AS last_paid_at,
+      COALESCE(SUM(amount) FILTER (WHERE status = 'paid' AND simulated = true), 0)::bigint AS simulated_total,
+      count(*) FILTER (WHERE status = 'paid' AND simulated = true)::int AS simulated_count
     FROM donations
   `)
   const projects = await query(`
@@ -63,6 +97,8 @@ async function impact() {
     total_received: Number(totals.rows[0].total_received || 0),
     paid_donations: totals.rows[0].paid_donations || 0,
     last_paid_at: totals.rows[0].last_paid_at,
+    simulated_total: Number(totals.rows[0].simulated_total || 0),
+    simulated_count: totals.rows[0].simulated_count || 0,
     active_projects: projects.rows[0].active || 0,
     completed_projects: projects.rows[0].completed || 0,
     people_supported:
@@ -93,7 +129,7 @@ router.get('/site', async (_req, res, next) => {
         `SELECT ${PROJECT_FIELDS} FROM projects p WHERE p.is_active = true ORDER BY p.sort, p.created_at DESC LIMIT 3`
       ),
       query(
-        `SELECT id, slug, title, excerpt, image_url, published_at FROM stories
+        `SELECT id, slug, title, excerpt, image_url, category, is_sample, published_at FROM stories
          WHERE is_published = true ORDER BY published_at DESC LIMIT 3`
       ),
       impact(),
@@ -104,7 +140,7 @@ router.get('/site', async (_req, res, next) => {
       projects: projects.rows,
       stories: stories.rows,
       impact: stats,
-      payment: { online: gatewayConfig().enabled },
+      payment: { online: gatewayConfig().enabled, simulated: !gatewayConfig().enabled },
       volunteerInterests: INTERESTS,
     })
   } catch (error) {
@@ -118,6 +154,36 @@ router.get('/activities', async (_req, res, next) => {
       'SELECT id, slug, title, summary, body, icon, image_url FROM activities WHERE is_active = true ORDER BY sort, id'
     )
     res.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+})
+
+/* --------------------------------- pages --------------------------------- */
+
+router.get('/pages', async (_req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT slug, title, subtitle, meta_title, meta_description, updated_at
+       FROM pages WHERE is_published = true ORDER BY sort, id`
+    )
+    res.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get('/pages/:slug', async (req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT slug, title, subtitle, body, meta_title, meta_description, updated_at
+       FROM pages WHERE slug = $1 AND is_published = true`,
+      [req.params.slug]
+    )
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'صفحه موردنظر پیدا نشد.' })
+    }
+    res.json(result.rows[0])
   } catch (error) {
     next(error)
   }
@@ -152,7 +218,7 @@ router.get('/projects/:slug', async (req, res, next) => {
 router.get('/stories', async (_req, res, next) => {
   try {
     const result = await query(
-      `SELECT id, slug, title, excerpt, image_url, author, published_at
+      `SELECT id, slug, title, excerpt, image_url, author, category, is_sample, published_at
        FROM stories WHERE is_published = true ORDER BY published_at DESC`
     )
     res.json(result.rows)
@@ -164,7 +230,7 @@ router.get('/stories', async (_req, res, next) => {
 router.get('/stories/:slug', async (req, res, next) => {
   try {
     const result = await query(
-      `SELECT id, slug, title, excerpt, body, image_url, author, published_at
+      `SELECT id, slug, title, excerpt, body, image_url, author, category, is_sample, published_at
        FROM stories WHERE slug = $1 AND is_published = true`,
       [req.params.slug]
     )
@@ -182,7 +248,7 @@ router.get('/transparency', async (_req, res, next) => {
     const [stats, reports] = await Promise.all([
       impact(),
       query(
-        `SELECT id, title, period, summary, amount_spent, file_url, published_at
+        `SELECT id, title, period, summary, amount_spent, file_url, published_at, is_sample
          FROM financial_reports ORDER BY published_at DESC`
       ),
     ])
@@ -192,7 +258,7 @@ router.get('/transparency', async (_req, res, next) => {
   }
 })
 
-router.post('/donations', async (req, res, next) => {
+router.post('/donations', guard('donation', 15, 10 * 60 * 1000), async (req, res, next) => {
   try {
     const amount = toAmount(req.body?.amount)
     if (amount < 10000) {
@@ -259,29 +325,93 @@ router.post('/donations', async (req, res, next) => {
       })
     }
 
+    // No live gateway is configured: the checkout continues on the simulated
+    // payment screen, where nothing is charged and no card data is collected.
+    const project = projectId
+      ? await query('SELECT title FROM projects WHERE id = $1', [projectId])
+      : null
     return res.status(201).json({
-      mode: 'pending',
+      mode: 'simulation',
       tracking: inserted.rows[0].tracking_code,
-      message:
-        'درخواست کمک شما ثبت شد. درگاه پرداخت آنلاین هنوز به سایت متصل نشده است؛ همکاران ما برای هماهنگی با شما تماس می‌گیرند.',
+      amount,
+      project_title: project?.rows[0]?.title || null,
+      message: 'درخواست کمک شما ثبت شد. در این نسخه پرداخت شبیه‌سازی می‌شود.',
     })
   } catch (error) {
     next(error)
   }
 })
 
+const DONATION_SELECT = `
+  SELECT d.tracking_code, d.amount, d.status, d.simulated, d.created_at, d.paid_at,
+         d.is_anonymous, d.note, p.title AS project_title, p.slug AS project_slug
+  FROM donations d LEFT JOIN projects p ON p.id = d.project_id
+`
+
 router.get('/donations/:tracking', async (req, res, next) => {
   try {
-    const result = await query(
-      `SELECT d.tracking_code, d.amount, d.status, d.created_at, d.paid_at, p.title AS project_title
-       FROM donations d LEFT JOIN projects p ON p.id = d.project_id
-       WHERE d.tracking_code = $1`,
-      [req.params.tracking]
-    )
+    const result = await query(`${DONATION_SELECT} WHERE d.tracking_code = $1`, [
+      clean(req.params.tracking, 40).toUpperCase(),
+    ])
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'کد پیگیری پیدا نشد.' })
     }
     res.json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+})
+
+// Simulated checkout. Only available while no real gateway is configured, and the
+// row it creates is permanently flagged `simulated` so no public total counts it.
+router.post(
+  '/donations/:tracking/simulate',
+  guard('simulate', 30, 10 * 60 * 1000),
+  async (req, res, next) => {
+    try {
+      if (gatewayConfig().enabled) {
+        return res.status(409).json({
+          error: 'درگاه پرداخت واقعی فعال است؛ پرداخت شبیه‌سازی‌شده در دسترس نیست.',
+        })
+      }
+      const tracking = clean(req.params.tracking, 40).toUpperCase()
+      const found = await query('SELECT id, status FROM donations WHERE tracking_code = $1', [
+        tracking,
+      ])
+      if (found.rowCount === 0) {
+        return res.status(404).json({ error: 'کد پیگیری پیدا نشد.' })
+      }
+      const row = found.rows[0]
+      if (row.status === 'paid') {
+        const existing = await query(`${DONATION_SELECT} WHERE d.tracking_code = $1`, [tracking])
+        return res.json(existing.rows[0])
+      }
+      if (row.status === 'canceled') {
+        return res.status(409).json({ error: 'این کمک لغو شده است و قابل پرداخت نیست.' })
+      }
+      await query(
+        `UPDATE donations
+         SET status = 'paid', simulated = true, paid_at = now(),
+             gateway = 'simulated', gateway_reference = $2
+         WHERE id = $1`,
+        [row.id, `SIM-${crypto.randomBytes(4).toString('hex').toUpperCase()}`]
+      )
+      const receipt = await query(`${DONATION_SELECT} WHERE d.tracking_code = $1`, [tracking])
+      res.json(receipt.rows[0])
+    } catch (error) {
+      next(error)
+    }
+  }
+)
+
+router.post('/donations/:tracking/cancel', async (req, res, next) => {
+  try {
+    const tracking = clean(req.params.tracking, 40).toUpperCase()
+    await query(
+      "UPDATE donations SET status = 'canceled' WHERE tracking_code = $1 AND status = 'pending'",
+      [tracking]
+    )
+    res.json({ ok: true })
   } catch (error) {
     next(error)
   }
@@ -330,7 +460,7 @@ router.get('/payments/callback', async (req, res) => {
   }
 })
 
-router.post('/volunteers', async (req, res, next) => {
+router.post('/volunteers', guard('volunteer', 8, 10 * 60 * 1000), async (req, res, next) => {
   try {
     const fullName = clean(req.body?.full_name, 120)
     const phone = normalizePhone(clean(req.body?.phone, 20))
@@ -368,7 +498,7 @@ router.post('/volunteers', async (req, res, next) => {
   }
 })
 
-router.post('/contact', async (req, res, next) => {
+router.post('/contact', guard('contact', 8, 10 * 60 * 1000), async (req, res, next) => {
   try {
     const name = clean(req.body?.name, 120)
     const phone = clean(req.body?.phone, 20)
@@ -402,7 +532,7 @@ router.post('/contact', async (req, res, next) => {
   }
 })
 
-router.post('/newsletter', async (req, res, next) => {
+router.post('/newsletter', guard('newsletter', 10, 10 * 60 * 1000), async (req, res, next) => {
   try {
     const email = clean(req.body?.email, 160).toLowerCase()
     if (!isEmail(email)) {

@@ -5,8 +5,16 @@ import { Button, Empty, Notice, PageHero } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import { StoryCard } from '../components/cards.jsx'
 import Reveal from '../components/Reveal.jsx'
+import { useSeo } from '../lib/seo.jsx'
 
 export default function Stories() {
+  useSeo({
+    title: 'اخبار و مقالات',
+    description:
+      'اخبار، گزارش فعالیت‌ها و مقالات درباره کار خیریه و حمایت از زنان و کودکان.',
+    path: '/stories',
+  })
+
   const { data, loading, error } = useResource(() => api('/stories'), [])
   const stories = data || []
 

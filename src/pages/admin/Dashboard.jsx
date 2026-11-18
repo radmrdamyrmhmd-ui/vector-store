@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CalendarClock,
+  Database,
+  Download,
   FileText,
   HandCoins,
   Mail,
@@ -8,12 +11,36 @@ import {
 } from 'lucide-react'
 import { api } from '../../lib/api.js'
 import { useResource } from '../../lib/useResource.js'
-import { Spinner, Notice } from '../../components/ui.jsx'
+import { Button, Spinner, Notice } from '../../components/ui.jsx'
 import { AdminHeader, Panel, StatusPill } from './parts.jsx'
 import { formatDateTime, money, num } from '../../lib/format.js'
 
 export default function AdminDashboard() {
   const { data, loading, error } = useResource(() => api('/admin/stats'), [])
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [backupError, setBackupError] = useState('')
+
+  async function downloadBackup() {
+    setBackupBusy(true)
+    setBackupError('')
+    try {
+      const response = await fetch('/api/admin/backup', { credentials: 'include' })
+      if (!response.ok) throw new Error('دریافت پشتیبان ناموفق بود.')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `hamrahan-backup-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setBackupError(err.message)
+    } finally {
+      setBackupBusy(false)
+    }
+  }
 
   if (loading) return <Spinner />
   if (error) return <Notice tone="error">{error}</Notice>
@@ -24,7 +51,6 @@ export default function AdminDashboard() {
     { label: 'درخواست داوطلبی جدید', value: num(data.counts.new_volunteers), hint: 'بررسی‌نشده', icon: Users, to: '/admin/volunteers' },
     { label: 'پیام‌های خوانده‌نشده', value: num(data.counts.unread_messages), hint: 'فرم تماس', icon: Mail, to: '/admin/messages' },
   ]
-
   return (
     <>
       <AdminHeader
@@ -50,6 +76,13 @@ export default function AdminDashboard() {
           </Link>
         ))}
       </div>
+
+      {data.donations.simulated_count > 0 && (
+        <Notice tone="info" className="mt-4">
+          {num(data.donations.simulated_count)} پرداخت شبیه‌سازی‌شده ثبت شده است. این پرداخت‌ها در
+          رقم «کمک‌های تأییدشده» بالا محاسبه نشده‌اند و فقط برای نمایش جریان پرداخت هستند.
+        </Notice>
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="آخرین کمک‌های ثبت‌شده" description="شامل تراکنش‌های در انتظار و تأییدشده">
@@ -123,6 +156,21 @@ export default function AdminDashboard() {
                 تنظیمات سایت
               </Link>
             </div>
+          </Panel>
+
+          <Panel
+            title="پشتیبان‌گیری"
+            description="یک فایل JSON از محتوای سایت، درخواست‌ها و تنظیمات دریافت کنید. رمزهای عبور در آن نیست."
+          >
+            <Button size="sm" variant="outline" onClick={downloadBackup} loading={backupBusy}>
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              دریافت پشتیبان
+            </Button>
+            {backupError && <p className="mt-2 text-[11px] text-red-600">{backupError}</p>}
+            <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-6 text-muted">
+              <Database className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+              پشتیبان کامل دیتابیس با دستور pg_dump گرفته می‌شود؛ روش بازیابی در مستندات پروژه آمده است.
+            </p>
           </Panel>
 
           <Panel title="آخرین داوطلبان">

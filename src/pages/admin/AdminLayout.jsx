@@ -1,18 +1,22 @@
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
+  BookOpen,
   FileText,
   FolderKanban,
   HandCoins,
+  History,
+  Images,
   LayoutDashboard,
   Layers,
   LogOut,
   Mail,
   Newspaper,
   Settings,
+  UserCog,
   Users,
 } from 'lucide-react'
-import { ADMIN_NAV } from '../../lib/nav.js'
+import { ADMIN_NAV, ROLE_LABELS } from '../../lib/nav.js'
 import { useAuth } from '../../lib/auth.jsx'
 import { useSettings } from '../../lib/site.jsx'
 import { Button, Spinner } from '../../components/ui.jsx'
@@ -23,10 +27,14 @@ const ICONS = {
   projects: FolderKanban,
   stories: Newspaper,
   activities: Layers,
+  pages: BookOpen,
   reports: FileText,
+  media: Images,
   donations: HandCoins,
   volunteers: Users,
   messages: Mail,
+  users: UserCog,
+  audit: History,
   settings: Settings,
 }
 
@@ -63,7 +71,7 @@ export default function AdminLayout() {
             </NavLink>
           </div>
           <nav className="flex gap-1 overflow-x-auto px-3 py-3 lg:flex-col lg:overflow-visible" aria-label="منوی مدیریت">
-            {ADMIN_NAV.map((item) => {
+            {ADMIN_NAV.filter((item) => !item.adminOnly || user.role === 'admin').map((item) => {
               const Icon = ICONS[item.icon] || LayoutDashboard
               return (
                 <NavLink
@@ -98,8 +106,10 @@ export default function AdminLayout() {
         <div className="min-w-0 flex-1">
           <header className="flex items-center justify-between gap-3 border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:px-8">
             <div className="flex items-center gap-2 text-[11.5px] text-muted">
-              <span className="rounded-full bg-brand-50 px-2.5 py-1 text-brand">مدیر</span>
-              <span className="hidden sm:inline">{settings.site_name || 'همراهان امید'}</span>
+              <span className="rounded-full bg-brand-50 px-2.5 py-1 text-brand">
+                {ROLE_LABELS[user.role] || 'کاربر'}
+              </span>
+              <span className="hidden sm:inline truncate">{user.name || user.email}</span>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" to="/">

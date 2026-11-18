@@ -25,6 +25,9 @@ export default defineConfig({
     proxy: {
       '/api': { target: apiTarget, changeOrigin: false },
       '/uploads': { target: apiTarget, changeOrigin: false },
+      // SEO files are generated from the database by the API.
+      '/sitemap.xml': { target: apiTarget, changeOrigin: false },
+      '/robots.txt': { target: apiTarget, changeOrigin: false },
     },
   },
 })

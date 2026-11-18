@@ -16,6 +16,7 @@ import { ActivityCard, ImpactCard, ProjectCard, StoryCard } from '../components/
 import { NewsletterForm } from '../components/forms.jsx'
 import Reveal from '../components/Reveal.jsx'
 import { compactMoney, formatDate, num, paragraphs } from '../lib/format.js'
+import { useSeo } from '../lib/seo.jsx'
 
 function Hero() {
   const settings = useSettings()
@@ -381,6 +382,13 @@ function JoinBand() {
 }
 
 export default function Home() {
+  useSeo({
+    title: 'حمایت از زنان و کودکان بلوچ',
+    description:
+      'نمونه‌کار وب‌سایت خیریه همراهان امید: آموزش، توانمندسازی و حمایت از زنان و کودکان بلوچ.',
+    path: '/',
+  })
+
   return (
     <>
       <Hero />

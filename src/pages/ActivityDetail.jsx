@@ -6,6 +6,7 @@ import { Artwork } from '../components/Art.jsx'
 import { Button, Empty, Notice, SectionHead } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import { paragraphs } from '../lib/format.js'
+import { breadcrumbJsonLd, useSeo } from '../lib/seo.jsx'
 
 const ICONS = {
   book: BookOpen,
@@ -21,6 +22,19 @@ export default function ActivityDetail() {
   const activity = activities.find((item) => item.slug === slug)
   const others = activities.filter((item) => item.slug !== slug).slice(0, 3)
 
+  useSeo({
+    title: activity?.title,
+    description: activity?.summary || undefined,
+    path: `/activities/${slug}`,
+    image: activity?.image_url || undefined,
+    jsonLd: activity
+      ? breadcrumbJsonLd([
+          { label: 'صفحه اصلی', to: '/' },
+          { label: 'حوزه‌های فعالیت', to: '/activities' },
+          { label: activity.title, to: `/activities/${activity.slug}` },
+        ])
+      : undefined,
+  })
   if (loading) {
     return (
       <div className="container-x py-20">

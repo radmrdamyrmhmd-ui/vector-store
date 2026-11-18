@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { LockKeyhole } from 'lucide-react'
 import { useAuth } from '../../lib/auth.jsx'
+import { useSettings } from '../../lib/site.jsx'
 import { Button, Field, Input, Notice } from '../../components/ui.jsx'
 import { Logo } from '../../components/Art.jsx'
 
 export default function AdminLogin() {
   const { user, loading, login } = useAuth()
+  const settings = useSettings()
   const navigate = useNavigate()
   const location = useLocation()
   const [email, setEmail] = useState('')
@@ -50,8 +52,21 @@ export default function AdminLogin() {
 
           <h1 className="mt-6 text-[20px] text-ink">ورود مدیران</h1>
           <p className="mt-2 text-[12px] leading-6 text-muted">
-            این بخش فقط برای کاربران دارای نقش مدیر در دسترس است.
+            ورود فقط برای کاربران فعال با سطح دسترسی مدیر کل، ویرایشگر یا مشاهده‌گر ممکن است.
           </p>
+
+          {settings.demo_mode !== false && (
+            <Notice tone="info" className="mt-4">
+              <p className="font-medium">حساب نمایشی این نمونه‌کار</p>
+              <p className="mt-1 font-mono text-[11.5px]" dir="ltr">
+                admin@hamrahanomid.ir / Hamrahan1404!
+              </p>
+              <p className="mt-1 text-[11px]">
+                این حساب فقط برای بازدید نمونه است. در استقرار واقعی، رمز آن را از بخش تنظیمات تغییر
+                دهید.
+              </p>
+            </Notice>
+          )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
             <Field label="ایمیل" htmlFor="admin-email" required>

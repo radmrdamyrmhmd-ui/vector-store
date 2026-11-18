@@ -10,6 +10,10 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Roles: admin (full), editor (content + media), viewer (read-only).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value JSONB NOT NULL,
@@ -44,6 +48,9 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_sample BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS meta_description TEXT;
+
 CREATE TABLE IF NOT EXISTS stories (
   id SERIAL PRIMARY KEY,
   slug TEXT UNIQUE NOT NULL,
@@ -54,6 +61,25 @@ CREATE TABLE IF NOT EXISTS stories (
   author TEXT,
   published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   is_published BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS is_sample BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'خبر';
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS meta_description TEXT;
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS reading_minutes INTEGER;
+
+CREATE TABLE IF NOT EXISTS pages (
+  id SERIAL PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  subtitle TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  meta_title TEXT,
+  meta_description TEXT,
+  is_published BOOLEAN NOT NULL DEFAULT true,
+  sort INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -72,6 +98,9 @@ CREATE TABLE IF NOT EXISTS donations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   paid_at TIMESTAMPTZ
 );
+
+-- A simulated donation never represents real money. It is labelled as such everywhere.
+ALTER TABLE donations ADD COLUMN IF NOT EXISTS simulated BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS donations_project_idx ON donations(project_id);
 CREATE INDEX IF NOT EXISTS donations_status_idx ON donations(status);
@@ -116,3 +145,32 @@ CREATE TABLE IF NOT EXISTS financial_reports (
   published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE financial_reports ADD COLUMN IF NOT EXISTS is_sample BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS media (
+  id SERIAL PRIMARY KEY,
+  url TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  original_name TEXT,
+  mime TEXT,
+  size_bytes BIGINT,
+  uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS media_created_idx ON media(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  user_email TEXT,
+  action TEXT NOT NULL,
+  entity TEXT,
+  entity_id TEXT,
+  detail TEXT,
+  ip TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS audit_created_idx ON audit_log(created_at DESC);

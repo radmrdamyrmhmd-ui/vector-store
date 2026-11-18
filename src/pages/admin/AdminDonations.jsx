@@ -3,6 +3,7 @@ import { api } from '../../lib/api.js'
 import { useResource } from '../../lib/useResource.js'
 import { Notice, Spinner } from '../../components/ui.jsx'
 import { AdminHeader, Panel, StatusPill, Table, EmptyRow } from './parts.jsx'
+import { SimulatedTag } from '../../components/DemoRibbon.jsx'
 import { formatDateTime, money, num } from '../../lib/format.js'
 
 const FILTERS = [
@@ -89,7 +90,10 @@ export default function AdminDonations() {
                   {donation.donor_phone || '—'}
                 </td>
                 <td className="px-3 py-3">
-                  <StatusPill status={donation.status} />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusPill status={donation.status} />
+                    {donation.simulated && <SimulatedTag />}
+                  </div>
                 </td>
                 <td className="px-3 py-3 text-[10.5px] text-muted">{formatDateTime(donation.created_at)}</td>
                 <td className="px-3 py-3 font-mono text-[10px] text-muted" dir="ltr">
@@ -103,8 +107,9 @@ export default function AdminDonations() {
 
       <p className="mt-4 rounded-2xl border border-line bg-white px-5 py-4 text-[11px] leading-6 text-muted">
         اطلاعات تماس اهداکنندگان فقط برای هماهنگی و ارسال رسید استفاده می‌شود و نباید در گزارش‌های
-        عمومی منتشر شود. برای تغییر وضعیت تراکنش، از پنل درگاه پرداخت استفاده کنید؛ این سامانه وضعیت
-        پرداخت را به‌صورت دستی «موفق» نمی‌کند تا آمار مالی واقعی بماند.
+        عمومی منتشر شود. تراکنش‌های دارای برچسب «پرداخت شبیه‌سازی‌شده» در آمار کمک‌های واقعی محاسبه
+        نمی‌شوند. وضعیت پرداخت واقعی را فقط درگاه بانکی تعیین می‌کند و این سامانه آن را دستی «موفق»
+        نمی‌کند.
       </p>
     </>
   )

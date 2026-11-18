@@ -3,6 +3,7 @@ import { useSite } from '../lib/site.jsx'
 import { VolunteerForm } from '../components/forms.jsx'
 import { PageHero } from '../components/ui.jsx'
 import { Breadcrumbs, PrivacyNote } from '../components/blocks.jsx'
+import { useSeo } from '../lib/seo.jsx'
 
 const AREAS = [
   { icon: BookOpen, title: 'آموزش', text: 'تدریس، کمک آموزشی و همراهی تحصیلی کودکان.' },
@@ -14,6 +15,13 @@ const AREAS = [
 ]
 
 export default function Volunteer() {
+  useSeo({
+    title: 'فرم داوطلبی',
+    description:
+      'ثبت درخواست همکاری داوطلبانه در حوزه‌های آموزش، تولید محتوا، طراحی و پشتیبانی اجرایی.',
+    path: '/volunteer',
+  })
+
   const { volunteerInterests } = useSite()
 
   return (

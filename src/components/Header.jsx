@@ -190,8 +190,11 @@ export default function Header() {
               <NavLink to="/volunteer" className="block rounded-2xl px-4 py-3 text-[14px] text-ink/80 hover:bg-cream">
                 همکاری و داوطلبی
               </NavLink>
-              <NavLink to="/legal" className="block rounded-2xl px-4 py-3 text-[14px] text-ink/80 hover:bg-cream">
-                قوانین و حریم خصوصی
+              <NavLink to="/privacy" className="block rounded-2xl px-4 py-3 text-[14px] text-ink/80 hover:bg-cream">
+                حریم خصوصی
+              </NavLink>
+              <NavLink to="/terms" className="block rounded-2xl px-4 py-3 text-[14px] text-ink/80 hover:bg-cream">
+                شرایط استفاده
               </NavLink>
             </nav>
             <div className="border-t border-line px-5 py-5">

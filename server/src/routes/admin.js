@@ -3,11 +3,21 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Router } from 'express'
 import multer from 'multer'
+import bcrypt from 'bcryptjs'
 import { query } from '../db.js'
-import { requireAdmin } from '../auth.js'
+import { adminOnly, canWrite, requireAuth } from '../auth.js'
+import { ROLES, auditMiddleware, logEvent } from '../audit.js'
 
 const router = Router()
-router.use(requireAdmin)
+
+// Every panel request needs a signed-in, active user; the access level is
+// enforced here, on the server, for every mutation.
+router.use(requireAuth)
+router.use(auditMiddleware)
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') return next()
+  return canWrite(req, res, next)
+})
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads'
 fs.mkdirSync(UPLOAD_DIR, { recursive: true })
@@ -43,6 +53,8 @@ const SETTINGS_TEXT_KEYS = [
   'whatsapp',
   'footer_about',
   'legal_owner',
+  'demo_note',
+  'donation_notice',
 ]
 
 function slugify(value, prefix) {
@@ -89,7 +101,7 @@ const upload = multer({
 })
 
 router.post('/upload', (req, res) => {
-  upload.single('file')(req, res, (error) => {
+  upload.single('file')(req, res, async (error) => {
     if (error) {
       const message =
         error.code === 'LIMIT_FILE_SIZE'
@@ -100,7 +112,24 @@ router.post('/upload', (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'فایلی انتخاب نشده است.' })
     }
-    res.status(201).json({ url: `/uploads/${req.file.filename}` })
+    const url = `/uploads/${req.file.filename}`
+    try {
+      const inserted = await query(
+        `INSERT INTO media (url, filename, original_name, mime, size_bytes, uploaded_by)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, url, original_name, mime, size_bytes, created_at`,
+        [
+          url,
+          req.file.filename,
+          (req.file.originalname || '').slice(0, 200),
+          req.file.mimetype || null,
+          req.file.size || null,
+          req.user?.id || null,
+        ]
+      )
+      res.status(201).json({ url, media: inserted.rows[0] })
+    } catch (err) {
+      res.status(201).json({ url })
+    }
   })
 })
 
@@ -118,13 +147,14 @@ router.get('/stats', async (_req, res, next) => {
       `),
       query(`
         SELECT
-          COALESCE(SUM(amount) FILTER (WHERE status = 'paid'), 0)::bigint AS paid_total,
-          count(*) FILTER (WHERE status = 'paid')::int AS paid_count,
-          count(*) FILTER (WHERE status = 'pending')::int AS pending_count
+          COALESCE(SUM(amount) FILTER (WHERE status = 'paid' AND simulated = false), 0)::bigint AS paid_total,
+          count(*) FILTER (WHERE status = 'paid' AND simulated = false)::int AS paid_count,
+          count(*) FILTER (WHERE status = 'pending')::int AS pending_count,
+          count(*) FILTER (WHERE status = 'paid' AND simulated = true)::int AS simulated_count
         FROM donations
       `),
       query(`
-        SELECT d.tracking_code, d.amount, d.status, d.created_at, d.is_anonymous, p.title AS project_title
+        SELECT d.tracking_code, d.amount, d.status, d.simulated, d.created_at, d.is_anonymous, p.title AS project_title
         FROM donations d LEFT JOIN projects p ON p.id = d.project_id
         ORDER BY d.created_at DESC LIMIT 6
       `),
@@ -152,7 +182,9 @@ router.get('/stats', async (_req, res, next) => {
 router.get('/projects', async (_req, res, next) => {
   try {
     const result = await query(`
-      SELECT p.*, COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid'), 0)::bigint AS raised_amount
+      SELECT p.*,
+        COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid' AND d.simulated = false), 0)::bigint AS raised_amount,
+        COALESCE((SELECT SUM(d.amount) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid' AND d.simulated = true), 0)::bigint AS simulated_amount
       FROM projects p ORDER BY p.sort, p.created_at DESC
     `)
     res.json(result.rows)
@@ -169,8 +201,8 @@ router.post('/projects', async (req, res, next) => {
     }
     const slug = await uniqueSlug('projects', req.body?.slug || title, 'project')
     const result = await query(
-      `INSERT INTO projects (slug, title, summary, description, image_url, target_amount, location, status, is_active, sort)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO projects (slug, title, summary, description, image_url, target_amount, location, status, is_active, sort, is_sample, meta_description)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
         slug,
         title,
@@ -182,6 +214,8 @@ router.post('/projects', async (req, res, next) => {
         clean(req.body?.status, 20) || 'active',
         toBool(req.body?.is_active),
         Number(req.body?.sort || 0),
+        toBool(req.body?.is_sample, false),
+        clean(req.body?.meta_description, 300) || null,
       ]
     )
     res.status(201).json(result.rows[0])
@@ -200,8 +234,8 @@ router.put('/projects/:id', async (req, res, next) => {
     const slug = await uniqueSlug('projects', req.body?.slug || title, 'project', id)
     const result = await query(
       `UPDATE projects SET slug=$1, title=$2, summary=$3, description=$4, image_url=$5,
-        target_amount=$6, location=$7, status=$8, is_active=$9, sort=$10
-       WHERE id=$11 RETURNING *`,
+        target_amount=$6, location=$7, status=$8, is_active=$9, sort=$10, is_sample=$11, meta_description=$12
+       WHERE id=$13 RETURNING *`,
       [
         slug,
         title,
@@ -213,6 +247,8 @@ router.put('/projects/:id', async (req, res, next) => {
         clean(req.body?.status, 20) || 'active',
         toBool(req.body?.is_active),
         Number(req.body?.sort || 0),
+        toBool(req.body?.is_sample, false),
+        clean(req.body?.meta_description, 300) || null,
         id,
       ]
     )
@@ -323,20 +359,35 @@ function storyPayload(body, isUpdate = false) {
     body: clean(body?.body, 20000),
     image_url: clean(body?.image_url, 500) || null,
     author: clean(body?.author, 120) || null,
+    category: clean(body?.category, 40) || 'خبر',
     published_at: clean(body?.published_at, 40) || new Date().toISOString(),
     is_published: toBool(body?.is_published, isUpdate ? false : false),
+    is_sample: toBool(body?.is_sample, false),
+    meta_description: clean(body?.meta_description, 300) || null,
   }
 }
 
 router.post('/stories', async (req, res, next) => {
   try {
     const payload = storyPayload(req.body)
-    if (payload.title.length < 3) return res.status(400).json({ error: 'عنوان داستان را وارد کنید.' })
+    if (payload.title.length < 3) return res.status(400).json({ error: 'عنوان مقاله را وارد کنید.' })
     const slug = await uniqueSlug('stories', req.body?.slug || payload.title, 'story')
     const result = await query(
-      `INSERT INTO stories (slug, title, excerpt, body, image_url, author, published_at, is_published)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [slug, payload.title, payload.excerpt, payload.body, payload.image_url, payload.author, payload.published_at, payload.is_published]
+      `INSERT INTO stories (slug, title, excerpt, body, image_url, author, category, published_at, is_published, is_sample, meta_description)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [
+        slug,
+        payload.title,
+        payload.excerpt,
+        payload.body,
+        payload.image_url,
+        payload.author,
+        payload.category,
+        payload.published_at,
+        payload.is_published,
+        payload.is_sample,
+        payload.meta_description,
+      ]
     )
     res.status(201).json(result.rows[0])
   } catch (error) {
@@ -348,14 +399,28 @@ router.put('/stories/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id)
     const payload = storyPayload(req.body, true)
-    if (payload.title.length < 3) return res.status(400).json({ error: 'عنوان داستان را وارد کنید.' })
+    if (payload.title.length < 3) return res.status(400).json({ error: 'عنوان مقاله را وارد کنید.' })
     const slug = await uniqueSlug('stories', req.body?.slug || payload.title, 'story', id)
     const result = await query(
-      `UPDATE stories SET slug=$1, title=$2, excerpt=$3, body=$4, image_url=$5, author=$6, published_at=$7, is_published=$8
-       WHERE id=$9 RETURNING *`,
-      [slug, payload.title, payload.excerpt, payload.body, payload.image_url, payload.author, payload.published_at, payload.is_published, id]
+      `UPDATE stories SET slug=$1, title=$2, excerpt=$3, body=$4, image_url=$5, author=$6,
+        category=$7, published_at=$8, is_published=$9, is_sample=$10, meta_description=$11
+       WHERE id=$12 RETURNING *`,
+      [
+        slug,
+        payload.title,
+        payload.excerpt,
+        payload.body,
+        payload.image_url,
+        payload.author,
+        payload.category,
+        payload.published_at,
+        payload.is_published,
+        payload.is_sample,
+        payload.meta_description,
+        id,
+      ]
     )
-    if (result.rowCount === 0) return res.status(404).json({ error: 'داستان پیدا نشد.' })
+    if (result.rowCount === 0) return res.status(404).json({ error: 'مقاله پیدا نشد.' })
     res.json(result.rows[0])
   } catch (error) {
     next(error)
@@ -450,7 +515,7 @@ router.get('/donations', async (req, res, next) => {
     }
     const result = await query(
       `SELECT d.id, d.tracking_code, d.amount, d.donor_name, d.donor_phone, d.is_anonymous,
-              d.note, d.status, d.gateway, d.gateway_reference, d.created_at, d.paid_at,
+              d.note, d.status, d.simulated, d.gateway, d.gateway_reference, d.created_at, d.paid_at,
               p.title AS project_title
        FROM donations d LEFT JOIN projects p ON p.id = d.project_id
        ${where}
@@ -537,6 +602,329 @@ router.get('/subscribers', async (_req, res, next) => {
   }
 })
 
+/* ---------------------------------- pages ---------------------------------- */
+
+router.get('/pages', async (_req, res, next) => {
+  try {
+    const result = await query('SELECT * FROM pages ORDER BY sort, id')
+    res.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+})
+
+function pagePayload(body) {
+  return {
+    title: clean(body?.title, 160),
+    subtitle: clean(body?.subtitle, 400),
+    body: clean(body?.body, 30000),
+    meta_title: clean(body?.meta_title, 160) || null,
+    meta_description: clean(body?.meta_description, 300) || null,
+    is_published: toBool(body?.is_published),
+    sort: Number(body?.sort || 0),
+  }
+}
+
+router.post('/pages', async (req, res, next) => {
+  try {
+    const payload = pagePayload(req.body)
+    if (payload.title.length < 3) return res.status(400).json({ error: 'عنوان صفحه را وارد کنید.' })
+    const slug = await uniqueSlug('pages', req.body?.slug || payload.title, 'page')
+    const result = await query(
+      `INSERT INTO pages (slug, title, subtitle, body, meta_title, meta_description, is_published, sort)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [
+        slug,
+        payload.title,
+        payload.subtitle,
+        payload.body,
+        payload.meta_title,
+        payload.meta_description,
+        payload.is_published,
+        payload.sort,
+      ]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.put('/pages/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    const payload = pagePayload(req.body)
+    if (payload.title.length < 3) return res.status(400).json({ error: 'عنوان صفحه را وارد کنید.' })
+    const current = await query('SELECT slug FROM pages WHERE id = $1', [id])
+    if (current.rowCount === 0) return res.status(404).json({ error: 'صفحه پیدا نشد.' })
+    // The slug addresses a public route, so only a new page may choose it.
+    const slug = await uniqueSlug('pages', req.body?.slug || current.rows[0].slug, 'page', id)
+    const result = await query(
+      `UPDATE pages SET slug=$1, title=$2, subtitle=$3, body=$4, meta_title=$5,
+        meta_description=$6, is_published=$7, sort=$8, updated_at=now()
+       WHERE id=$9 RETURNING *`,
+      [
+        slug,
+        payload.title,
+        payload.subtitle,
+        payload.body,
+        payload.meta_title,
+        payload.meta_description,
+        payload.is_published,
+        payload.sort,
+        id,
+      ]
+    )
+    res.json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.delete('/pages/:id', async (req, res, next) => {
+  try {
+    await query('DELETE FROM pages WHERE id = $1', [Number(req.params.id)])
+    res.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+/* ---------------------------------- media ---------------------------------- */
+
+router.get('/media', async (req, res, next) => {
+  try {
+    const kind = clean(req.query.kind, 20)
+    const params = []
+    let where = ''
+    if (kind === 'image') {
+      where = "WHERE mime LIKE 'image/%'"
+    } else if (kind === 'document') {
+      where = "WHERE mime NOT LIKE 'image/%'"
+    }
+    const result = await query(
+      `SELECT m.id, m.url, m.filename, m.original_name, m.mime, m.size_bytes, m.created_at,
+              u.email AS uploaded_by
+       FROM media m LEFT JOIN users u ON u.id = m.uploaded_by
+       ${where}
+       ORDER BY m.created_at DESC LIMIT 300`,
+      params
+    )
+    const totals = await query(
+      `SELECT count(*)::int AS files, COALESCE(SUM(size_bytes), 0)::bigint AS bytes FROM media`
+    )
+    res.json({ items: result.rows, totals: totals.rows[0] })
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.delete('/media/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    const found = await query('SELECT url, filename FROM media WHERE id = $1', [id])
+    if (found.rowCount === 0) return res.status(404).json({ error: 'فایل پیدا نشد.' })
+    await query('DELETE FROM media WHERE id = $1', [id])
+    // Only files inside the upload directory are removable.
+    const target = path.join(UPLOAD_DIR, path.basename(found.rows[0].filename))
+    fs.promises.unlink(target).catch(() => {})
+    res.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+/* ---------------------------------- users ---------------------------------- */
+
+router.get('/users', adminOnly, async (_req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT id, email, name, role, is_active, created_at, last_login_at
+       FROM users ORDER BY created_at`
+    )
+    res.json(result.rows)
+  } catch (error) {
+    next(error)
+  }
+})
+
+const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)
+
+router.post('/users', adminOnly, async (req, res, next) => {
+  try {
+    const email = clean(req.body?.email, 160).toLowerCase()
+    const name = clean(req.body?.name, 120) || 'کاربر'
+    const role = clean(req.body?.role, 20) || 'editor'
+    const password = String(req.body?.password || '')
+    if (!isEmail(email)) return res.status(400).json({ error: 'ایمیل معتبر نیست.' })
+    if (!ROLES.includes(role)) return res.status(400).json({ error: 'سطح دسترسی معتبر نیست.' })
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({ error: 'رمز عبور باید حداقل ۸ کاراکتر و شامل حرف و عدد باشد.' })
+    }
+    const exists = await query('SELECT id FROM users WHERE email = $1', [email])
+    if (exists.rowCount > 0) {
+      return res.status(409).json({ error: 'کاربری با این ایمیل قبلاً ثبت شده است.' })
+    }
+    const hash = await bcrypt.hash(password, 10)
+    const result = await query(
+      `INSERT INTO users (email, password_hash, name, role) VALUES ($1,$2,$3,$4)
+       RETURNING id, email, name, role, is_active, created_at`,
+      [email, hash, name, role]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.put('/users/:id', adminOnly, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    const target = await query('SELECT * FROM users WHERE id = $1', [id])
+    if (target.rowCount === 0) return res.status(404).json({ error: 'کاربر پیدا نشد.' })
+    const current = target.rows[0]
+    const role = clean(req.body?.role, 20) || current.role
+    const isActive = toBool(req.body?.is_active, current.is_active)
+    const name = clean(req.body?.name, 120) || current.name
+    if (!ROLES.includes(role)) return res.status(400).json({ error: 'سطح دسترسی معتبر نیست.' })
+
+    if (id === req.user.id && (!isActive || role !== 'admin')) {
+      return res.status(400).json({
+        error: 'نمی‌توانید دسترسی مدیر حساب خودتان را حذف کنید.',
+      })
+    }
+
+    const admins = await query(
+      "SELECT count(*)::int AS c FROM users WHERE role = 'admin' AND is_active = true AND id <> $1",
+      [id]
+    )
+    if (current.role === 'admin' && (role !== 'admin' || !isActive) && admins.rows[0].c === 0) {
+      return res.status(400).json({ error: 'دست‌کم یک مدیر فعال باید باقی بماند.' })
+    }
+
+    const result = await query(
+      `UPDATE users SET name=$1, role=$2, is_active=$3 WHERE id=$4
+       RETURNING id, email, name, role, is_active, created_at, last_login_at`,
+      [name, role, isActive, id]
+    )
+    res.json(result.rows[0])
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post('/users/:id/password', adminOnly, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    const password = String(req.body?.password || '')
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({ error: 'رمز عبور باید حداقل ۸ کاراکتر و شامل حرف و عدد باشد.' })
+    }
+    const hash = await bcrypt.hash(password, 10)
+    const result = await query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, email',
+      [hash, id]
+    )
+    if (result.rowCount === 0) return res.status(404).json({ error: 'کاربر پیدا نشد.' })
+    await logEvent({ req, action: 'password_reset', entity: 'users', entityId: id })
+    res.json({ message: 'رمز عبور کاربر بازنشانی شد.' })
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.delete('/users/:id', adminOnly, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    if (id === req.user.id) {
+      return res.status(400).json({ error: 'حساب خودتان را نمی‌توانید حذف کنید.' })
+    }
+    const target = await query('SELECT role FROM users WHERE id = $1', [id])
+    if (target.rowCount === 0) return res.status(404).json({ error: 'کاربر پیدا نشد.' })
+    if (target.rows[0].role === 'admin') {
+      const admins = await query(
+        "SELECT count(*)::int AS c FROM users WHERE role = 'admin' AND is_active = true AND id <> $1",
+        [id]
+      )
+      if (admins.rows[0].c === 0) {
+        return res.status(400).json({ error: 'دست‌کم یک مدیر فعال باید باقی بماند.' })
+      }
+    }
+    await query('DELETE FROM users WHERE id = $1', [id])
+    res.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+/* ------------------------------- audit trail ------------------------------- */
+
+router.get('/audit', adminOnly, async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit || 100), 500)
+    const action = clean(req.query.action, 40)
+    const params = []
+    let where = ''
+    if (action) {
+      params.push(action)
+      where = 'WHERE action = $1'
+    }
+    const result = await query(
+      `SELECT id, user_email, action, entity, entity_id, detail, ip, created_at
+       FROM audit_log ${where} ORDER BY created_at DESC LIMIT ${limit}`,
+      params
+    )
+    const actions = await query(
+      'SELECT action, count(*)::int AS c FROM audit_log GROUP BY action ORDER BY c DESC'
+    )
+    res.json({ items: result.rows, actions: actions.rows })
+  } catch (error) {
+    next(error)
+  }
+})
+
+/* --------------------------------- backup ---------------------------------- */
+
+router.get('/backup', adminOnly, async (_req, res, next) => {
+  try {
+    const [settings, activities, projects, stories, pages, reports, donations, volunteers, messages, subscribers] =
+      await Promise.all([
+        query('SELECT * FROM settings'),
+        query('SELECT * FROM activities ORDER BY id'),
+        query('SELECT * FROM projects ORDER BY id'),
+        query('SELECT * FROM stories ORDER BY id'),
+        query('SELECT * FROM pages ORDER BY id'),
+        query('SELECT * FROM financial_reports ORDER BY id'),
+        query('SELECT * FROM donations ORDER BY id'),
+        query('SELECT * FROM volunteers ORDER BY id'),
+        query('SELECT * FROM contact_messages ORDER BY id'),
+        query('SELECT * FROM newsletter_subscribers ORDER BY id'),
+      ])
+    const payload = {
+      generated_at: new Date().toISOString(),
+      format: 'hamrahan-omid-backup/v1',
+      note: 'This export contains contact details. Store it privately. User passwords are never included.',
+      tables: {
+        settings: settings.rows,
+        activities: activities.rows,
+        projects: projects.rows,
+        stories: stories.rows,
+        pages: pages.rows,
+        financial_reports: reports.rows,
+        donations: donations.rows,
+        volunteers: volunteers.rows,
+        contact_messages: messages.rows,
+        newsletter_subscribers: subscribers.rows,
+      },
+    }
+    const stamp = new Date().toISOString().slice(0, 10)
+    res.setHeader('Content-Disposition', `attachment; filename="hamrahan-backup-${stamp}.json"`)
+    res.type('application/json').send(JSON.stringify(payload, null, 2))
+  } catch (error) {
+    next(error)
+  }
+})
+
 /* -------------------------------- settings -------------------------------- */
 
 router.get('/settings', async (_req, res, next) => {
@@ -548,12 +936,15 @@ router.get('/settings', async (_req, res, next) => {
   }
 })
 
-router.put('/settings', async (req, res, next) => {
+router.put('/settings', adminOnly, async (req, res, next) => {
   try {
     const incoming = req.body || {}
     const next = {}
     for (const key of SETTINGS_TEXT_KEYS) {
       if (key in incoming) next[key] = clean(incoming[key], 4000)
+    }
+    if ('demo_mode' in incoming) {
+      next.demo_mode = toBool(incoming.demo_mode, true)
     }
     if ('people_supported' in incoming) {
       next.people_supported = toAmount(incoming.people_supported)

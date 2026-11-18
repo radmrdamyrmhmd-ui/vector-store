@@ -2,29 +2,10 @@ import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Header from './Header.jsx'
 import Footer from './Footer.jsx'
-
-const TITLES = [
-  ['/activities', 'فعالیت‌های ما'],
-  ['/projects', 'پروژه‌های حمایتی'],
-  ['/donate', 'حمایت مالی'],
-  ['/transparency', 'گزارش عملکرد و شفافیت مالی'],
-  ['/stories', 'داستان‌ها و اخبار'],
-  ['/volunteer', 'همکاری و داوطلبی'],
-  ['/contact', 'تماس با ما'],
-  ['/legal', 'قوانین و حریم خصوصی'],
-  ['/mission', 'مأموریت و اهداف'],
-  ['/about', 'درباره ما'],
-]
-
-const DEFAULT_TITLE = 'همراهان امید | حمایت از زنان و کودکان بلوچ'
+import { DemoRibbon } from './DemoRibbon.jsx'
 
 export default function Layout() {
   const { pathname, hash } = useLocation()
-
-  useEffect(() => {
-    const match = TITLES.find(([path]) => pathname === path || pathname.startsWith(`${path}/`))
-    document.title = match ? `${match[1]} | همراهان امید` : DEFAULT_TITLE
-  }, [pathname])
 
   useEffect(() => {
     if (hash) {
@@ -45,6 +26,7 @@ export default function Layout() {
       >
         پرش به محتوای اصلی
       </a>
+      <DemoRibbon />
       <Header />
       <main id="main" className="flex-1">
         <Outlet />

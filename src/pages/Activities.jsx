@@ -5,6 +5,7 @@ import { Artwork } from '../components/Art.jsx'
 import { Button, Empty, PageHero, SectionHead } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import Reveal from '../components/Reveal.jsx'
+import { useSeo } from '../lib/seo.jsx'
 
 const ICONS = {
   book: BookOpen,
@@ -21,6 +22,13 @@ const VARIANT_BY_SLUG = {
 }
 
 export default function Activities() {
+  useSeo({
+    title: 'حوزه‌های فعالیت',
+    description:
+      'چهار حوزه اصلی فعالیت: آموزش کودکان، توانمندسازی زنان، حمایت معیشتی و سلامت.',
+    path: '/activities',
+  })
+
   const { activities, loading } = useSite()
 
   return (

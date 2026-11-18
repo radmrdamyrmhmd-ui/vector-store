@@ -12,8 +12,8 @@ import {
 } from 'lucide-react'
 import { Artwork } from './Art.jsx'
 import { Badge, Progress } from './ui.jsx'
+import { SampleTag } from './DemoRibbon.jsx'
 import { formatDate, money, num, progressPercent } from '../lib/format.js'
-
 const ACTIVITY_ICONS = {
   book: BookOpen,
   sparkles: Sparkles,
@@ -62,7 +62,10 @@ export function ProjectCard({ project }) {
       </Link>
       <div className="flex flex-1 flex-col p-6">
         <div className="flex items-center justify-between gap-3">
-          <Badge tone="brand">{STATUS_LABELS[project.status] || 'در حال اجرا'}</Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone="brand">{STATUS_LABELS[project.status] || 'در حال اجرا'}</Badge>
+            {project.is_sample && <SampleTag />}
+          </div>
           {project.location && (
             <span className="inline-flex items-center gap-1 text-[11px] text-muted">
               <MapPin className="h-3 w-3" aria-hidden="true" />
@@ -127,11 +130,18 @@ export function StoryCard({ story }) {
         />
       </Link>
       <div className="flex flex-1 flex-col p-6">
-        <span className="inline-flex items-center gap-1.5 text-[11.5px] text-muted">
-          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-          {formatDate(story.published_at)}
-        </span>
-        <h3 className="mt-3 text-[17px] leading-8 text-ink">
+        <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+            {formatDate(story.published_at)}
+          </span>
+          {story.category && (
+            <span className="rounded-full bg-cream px-2 py-0.5 text-[10.5px] text-muted">
+              {story.category}
+            </span>
+          )}
+          {story.is_sample && <SampleTag />}
+        </div>        <h3 className="mt-3 text-[17px] leading-8 text-ink">
           <Link to={`/stories/${story.slug}`} className="transition hover:text-brand">
             {story.title}
           </Link>

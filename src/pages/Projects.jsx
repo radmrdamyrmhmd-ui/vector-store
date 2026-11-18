@@ -6,6 +6,7 @@ import { Empty, Notice, PageHero } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand } from '../components/blocks.jsx'
 import { ProjectCard } from '../components/cards.jsx'
 import Reveal from '../components/Reveal.jsx'
+import { useSeo } from '../lib/seo.jsx'
 
 const FILTERS = [
   { key: 'all', label: 'همه پروژه‌ها' },
@@ -14,6 +15,13 @@ const FILTERS = [
 ]
 
 export default function Projects() {
+  useSeo({
+    title: 'پروژه‌های حمایتی',
+    description:
+      'فهرست پروژه‌های حمایتی با توضیح هدف، محل اجرا و وضعیت هر پروژه.',
+    path: '/projects',
+  })
+
   const { data, loading, error } = useResource(() => api('/projects'), [])
   const [filter, setFilter] = useState('all')
   const projects = data || []

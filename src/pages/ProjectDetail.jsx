@@ -6,7 +6,9 @@ import { Artwork } from '../components/Art.jsx'
 import { Badge, Button, Empty, Progress } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import { ProjectCard } from '../components/cards.jsx'
+import { SampleTag } from '../components/DemoRibbon.jsx'
 import { formatDate, money, num, paragraphs, progressPercent } from '../lib/format.js'
+import { breadcrumbJsonLd, useSeo } from '../lib/seo.jsx'
 
 const STATUS_LABELS = {
   active: 'در حال اجرا',
@@ -19,6 +21,20 @@ export default function ProjectDetail() {
   const { data: project, loading, error } = useResource(() => api(`/projects/${slug}`), [slug])
   const { data: allProjects } = useResource(() => api('/projects'), [])
 
+  useSeo({
+    title: project?.title,
+    description: project?.meta_description || project?.summary || undefined,
+    path: `/projects/${slug}`,
+    image: project?.image_url || undefined,
+    type: 'article',
+    jsonLd: project
+      ? breadcrumbJsonLd([
+          { label: 'صفحه اصلی', to: '/' },
+          { label: 'پروژه‌های حمایتی', to: '/projects' },
+          { label: project.title, to: `/projects/${project.slug}` },
+        ])
+      : undefined,
+  })
   if (loading) {
     return (
       <div className="container-x py-20">
@@ -55,6 +71,7 @@ export default function ProjectDetail() {
           <div className="grid items-center gap-9 lg:grid-cols-[1.05fr_0.95fr]">
             <div>
               <Badge tone="accent">{STATUS_LABELS[project.status] || 'در حال اجرا'}</Badge>
+              {project.is_sample && <SampleTag className="mr-2" />}
               <h1 className="mt-4 text-[27px] leading-[1.45] text-ink sm:text-[34px]">{project.title}</h1>
               <p className="mt-4 text-[14px] leading-8 text-muted">{project.summary}</p>
               <div className="mt-5 flex flex-wrap items-center gap-5 text-[11.5px] text-muted">

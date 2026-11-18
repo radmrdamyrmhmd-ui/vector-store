@@ -113,18 +113,25 @@ export default function Footer() {
           <p>
             تمامی حقوق این وب‌سایت متعلق به {settings.legal_owner || 'مجموعه همراهان امید'} است.
           </p>
-          <div className="flex items-center gap-4">
-            <Link to="/legal#terms" className="transition hover:text-cream">
-              قوانین و مقررات
-            </Link>
-            <Link to="/legal#privacy" className="transition hover:text-cream">
+          <div className="flex flex-wrap items-center gap-4">
+            <Link to="/privacy" className="transition hover:text-cream">
               حریم خصوصی
+            </Link>
+            <Link to="/terms" className="transition hover:text-cream">
+              شرایط استفاده
             </Link>
             <Link to="/admin" className="transition hover:text-cream">
               ورود مدیران
             </Link>
           </div>
         </div>
+
+        {settings.demo_mode !== false && (
+          <p className="mt-5 rounded-2xl border border-cream/10 bg-cream/[0.04] px-4 py-3 text-[11px] leading-6 text-cream/45">
+            {settings.demo_note ||
+              'این وب‌سایت یک نمونه‌کار نمایشی است؛ مؤسسه فعال نیست و محتوای آن نمونه است.'}
+          </p>
+        )}
       </div>
     </footer>
   )

@@ -5,6 +5,7 @@ import { Button, PageHero, SectionHead } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import Reveal from '../components/Reveal.jsx'
 import { paragraphs } from '../lib/format.js'
+import { useSeo } from '../lib/seo.jsx'
 
 const VALUES = [
   {
@@ -30,6 +31,13 @@ const VALUES = [
 ]
 
 export default function About() {
+  useSeo({
+    title: 'درباره بنیاد',
+    description:
+      'معرفی بنیاد همراهان امید، ارزش‌ها و رویکرد کار با جامعه محلی در حمایت از زنان و کودکان بلوچ (نمونه‌کار نمایشی).',
+    path: '/about',
+  })
+
   const settings = useSettings()
 
   return (

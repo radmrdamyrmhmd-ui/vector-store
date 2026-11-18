@@ -5,8 +5,17 @@ import { Button, Empty, Notice, PageHero, SectionHead } from '../components/ui.j
 import { Breadcrumbs, CtaBand } from '../components/blocks.jsx'
 import { compactMoney, formatDate, money, num } from '../lib/format.js'
 import { ImpactCard } from '../components/cards.jsx'
+import { SampleTag } from '../components/DemoRibbon.jsx'
+import { useSeo } from '../lib/seo.jsx'
 
 export default function Transparency() {
+  useSeo({
+    title: 'گزارش‌های فعالیت و شفافیت',
+    description:
+      'گزارش فعالیت، شفافیت مالی و نحوه محاسبه اعداد از پایگاه داده؛ بدون آمار ساختگی.',
+    path: '/transparency',
+  })
+
   const { data, loading, error } = useResource(() => api('/transparency'), [])
   const impact = data?.impact
   const reports = data?.reports || []
@@ -67,8 +76,15 @@ export default function Transparency() {
           <div className="mt-6 rounded-[24px] border border-line bg-white px-6 py-5 text-[12px] leading-7 text-muted">
             <p>
               مجموع کمک‌ها فقط شامل تراکنش‌هایی است که درگاه پرداخت آن‌ها را تأیید کرده است. درخواست‌های
-              در انتظار پرداخت، در این آمار محاسبه نمی‌شوند.
+              در انتظار پرداخت و پرداخت‌های شبیه‌سازی‌شده در این آمار محاسبه نمی‌شوند.
             </p>
+            {impact?.simulated_count > 0 && (
+              <p className="mt-3 border-t border-line pt-3">
+                در این محیط نمایشی {num(impact.simulated_count)} پرداخت شبیه‌سازی‌شده به ارزش{' '}
+                {money(impact.simulated_total)} ثبت شده است. این مبلغ واقعی نیست و عمداً از آمار بالا
+                جدا نگه داشته شده تا با کمک‌های واقعی اشتباه نشود.
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -76,7 +92,7 @@ export default function Transparency() {
       <section id="reports" className="bg-cream/50 py-14 sm:py-16">
         <div className="container-x">
           <SectionHead
-            eyebrow="گزارش‌های مالی"
+            eyebrow="گزارش‌های فعالیت"
             title="گزارش‌ها و هزینه‌کرد کمک‌ها"
             text="گزارش‌های منتشرشده در این بخش، قابل مشاهده و دریافت به‌صورت PDF هستند."
           />
@@ -107,7 +123,10 @@ export default function Transparency() {
                         <FileText className="h-5 w-5" aria-hidden="true" />
                       </span>
                       <div>
-                        <p className="text-[14px] font-medium text-ink">{report.title}</p>
+                        <p className="flex flex-wrap items-center gap-2 text-[14px] font-medium text-ink">
+                          {report.title}
+                          {report.is_sample && <SampleTag />}
+                        </p>
                         <div className="mt-1 flex flex-wrap items-center gap-3 text-[11.5px] text-muted">
                           {report.period && <span>دوره: {report.period}</span>}
                           <span>انتشار: {formatDate(report.published_at)}</span>

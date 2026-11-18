@@ -3,6 +3,7 @@ import { useSettings } from '../lib/site.jsx'
 import { PageHero, SectionHead } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import Reveal from '../components/Reveal.jsx'
+import { useSeo } from '../lib/seo.jsx'
 
 const OBJECTIVES = [
   {
@@ -45,6 +46,13 @@ const STEPS = [
 ]
 
 export default function Mission() {
+  useSeo({
+    title: 'مأموریت و اهداف',
+    description:
+      'مأموریت، اهداف و اصول کاری بنیاد همراهان امید در آموزش، توانمندسازی و حمایت اجتماعی.',
+    path: '/mission',
+  })
+
   const settings = useSettings()
 
   return (

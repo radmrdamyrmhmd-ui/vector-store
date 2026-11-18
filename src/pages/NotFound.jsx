@@ -1,6 +1,9 @@
 import { Button } from '../components/ui.jsx'
+import { useSeo } from '../lib/seo.jsx'
 
 export default function NotFound() {
+  useSeo({ title: 'صفحه پیدا نشد', noindex: true })
+
   return (
     <section className="py-24">
       <div className="container-x max-w-xl text-center">

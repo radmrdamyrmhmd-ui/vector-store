@@ -3,8 +3,16 @@ import { useSettings } from '../lib/site.jsx'
 import { ContactForm } from '../components/forms.jsx'
 import { PageHero } from '../components/ui.jsx'
 import { Breadcrumbs } from '../components/blocks.jsx'
+import { useSeo } from '../lib/seo.jsx'
 
 export default function Contact() {
+  useSeo({
+    title: 'تماس با ما',
+    description:
+      'راه‌های تماس با مجموعه، فرم پیام و پاسخ به پرسش‌های رایج (نمونه‌کار نمایشی).',
+    path: '/contact',
+  })
+
   const settings = useSettings()
 
   const items = [

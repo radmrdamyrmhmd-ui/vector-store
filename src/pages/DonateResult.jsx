@@ -1,133 +1,165 @@
-import { useSearchParams } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { CheckCircle2, Clock3, Printer, XCircle } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { useResource } from '../lib/useResource.js'
-import { Button, Empty } from '../components/ui.jsx'
+import { Button, Notice } from '../components/ui.jsx'
+import { SimulatedTag } from '../components/DemoRibbon.jsx'
 import { formatDateTime, money } from '../lib/format.js'
-
-const STATES = {
-  paid: {
-    tone: 'success',
-    icon: CheckCircle2,
-    title: 'کمک شما با موفقیت تأیید شد',
-    text: 'پرداخت شما توسط درگاه تأیید شده است. رسید و گزارش مالی در بخش شفافیت به‌روزرسانی می‌شود.',
-  },
-  canceled: {
-    tone: 'warning',
-    icon: XCircle,
-    title: 'پرداخت تکمیل نشد',
-    text: 'تراکنش لغو شد و مبلغی از حساب شما کسر نشده است. می‌توانید دوباره تلاش کنید.',
-  },
-  failed: {
-    tone: 'error',
-    icon: AlertTriangle,
-    title: 'پرداخت تأیید نشد',
-    text: 'درگاه پرداخت این تراکنش را تأیید نکرد. اگر مبلغی کسر شده باشد، طبق قوانین درگاه بازگردانده می‌شود.',
-  },
-  pending: {
-    tone: 'info',
-    icon: Clock,
-    title: 'در انتظار تأیید پرداخت',
-    text: 'این درخواست ثبت شده اما پرداخت آن هنوز تأیید نشده است؛ بنابراین در گزارش مالی به‌عنوان کمک دریافت‌شده ثبت نمی‌شود.',
-  },
-  not_found: {
-    tone: 'warning',
-    icon: AlertTriangle,
-    title: 'اطلاعات این تراکنش پیدا نشد',
-    text: 'کد پیگیری را بررسی کنید یا با مجموعه تماس بگیرید.',
-  },
-}
+import { useSeo } from '../lib/seo.jsx'
 
 export default function DonateResult() {
-  const [params] = useSearchParams()
-  const tracking = params.get('tracking') || ''
-  const queryState = params.get('state') || ''
-  const { data: donation, loading, error } = useResource(
-    () => (tracking ? api(`/donations/${encodeURIComponent(tracking)}`) : Promise.resolve(null)),
+  const params = useParams()
+  const [search] = useSearchParams()
+  const tracking = params.tracking || search.get('tracking') || ''
+  const { data, loading, error } = useResource(
+    () => (tracking ? api(`/donations/${tracking}`) : Promise.resolve(null)),
     [tracking]
   )
 
-  const statusKey = queryState === 'not_found' ? 'not_found' : donation?.status || queryState || 'pending'
-  const view = STATES[statusKey] || STATES.pending
-  const Icon = view.icon
+  useSeo({ title: 'نتیجه کمک', noindex: true, path: `/donate/result/${tracking}` })
+
+  if (!tracking) {
+    return (
+      <div className="container-x max-w-2xl py-20">
+        <Notice tone="warning">کد پیگیری مشخص نشده است.</Notice>
+        <div className="mt-4">
+          <Button to="/donate" variant="outline" size="sm">
+            بازگشت به فرم کمک
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="container-x max-w-2xl py-20">
+        <div className="h-64 animate-pulse rounded-[26px] bg-cream/70" />
+      </div>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <div className="container-x max-w-2xl py-20">
+        <Notice tone="error">{error || 'کد پیگیری پیدا نشد.'}</Notice>
+        <div className="mt-4">
+          <Button to="/donate" variant="outline" size="sm">
+            ثبت کمک جدید
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const paid = data.status === 'paid'
+  const canceled = data.status === 'canceled'
 
   return (
-    <section className="py-16 sm:py-20">
+    <section className="py-12 sm:py-20">
       <div className="container-x max-w-2xl">
-        {loading ? (
-          <div className="h-64 animate-pulse rounded-[28px] bg-cream/70" />
-        ) : error ? (
-          <Empty
-            title="اطلاعات تراکنش در دسترس نیست"
-            text={error}
-            action={
-              <Button to="/donate" variant="outline" size="sm">
-                بازگشت به صفحه حمایت مالی
-              </Button>
-            }
-          />
-        ) : (
-          <div className="rounded-[28px] border border-line bg-white p-7 sm:p-10">
+        <div className="card-surface overflow-hidden">
+          <div
+            className={`px-6 py-8 text-center sm:px-10 ${
+              paid ? 'bg-emerald-50/60' : canceled ? 'bg-cream/60' : 'bg-amber-50/60'
+            }`}
+          >
             <span
-              className={`grid h-14 w-14 place-items-center rounded-2xl ${
-                view.tone === 'success'
-                  ? 'bg-emerald-50 text-emerald-600'
-                  : view.tone === 'error'
-                    ? 'bg-red-50 text-red-600'
-                    : view.tone === 'warning'
-                      ? 'bg-amber-50 text-amber-600'
-                      : 'bg-brand-50 text-brand'
+              className={`mx-auto grid h-14 w-14 place-items-center rounded-full ${
+                paid
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : canceled
+                    ? 'bg-white text-muted'
+                    : 'bg-amber-100 text-amber-700'
               }`}
             >
-              <Icon className="h-6 w-6" aria-hidden="true" />
+              {paid ? (
+                <CheckCircle2 className="h-7 w-7" aria-hidden="true" />
+              ) : canceled ? (
+                <XCircle className="h-7 w-7" aria-hidden="true" />
+              ) : (
+                <Clock3 className="h-7 w-7" aria-hidden="true" />
+              )}
             </span>
-            <h1 className="mt-5 text-[24px] leading-[1.5] text-ink">{view.title}</h1>
-            <p className="mt-3 text-[13.5px] leading-8 text-muted">{view.text}</p>
+            <h1 className="mt-4 text-[22px] leading-9 text-ink sm:text-[26px]">
+              {paid
+                ? 'کمک شما (به‌صورت آزمایشی) ثبت شد'
+                : canceled
+                  ? 'این کمک لغو شد'
+                  : 'این کمک در انتظار تأیید است'}
+            </h1>
+            <p className="mx-auto mt-2 max-w-md text-[13px] leading-7 text-muted">
+              {paid &&
+                'این نتیجه یک پرداخت شبیه‌سازی‌شده است. در یک استقرار واقعی، همین مرحله پس از تأیید درگاه بانکی نمایش داده می‌شود.'}
+              {canceled &&
+                'پرداخت آزمایشی انجام نشد و هیچ رکوردی به‌عنوان کمک دریافت‌شده ثبت نشده است.'}
+              {!paid &&
+                !canceled &&
+                'این رکورد هنوز پرداخت نشده است. می‌توانید مرحله تأیید پرداخت را دوباره انجام دهید.'}
+            </p>
+            {paid && <SimulatedTag className="mt-4" />}
+          </div>
 
-            <dl className="mt-6 space-y-3 rounded-2xl border border-line bg-cream/50 px-5 py-4 text-[12.5px]">
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted">کد پیگیری</dt>
-                <dd className="font-mono tracking-widest text-ink">{donation?.tracking_code || tracking || '—'}</dd>
+          <div className="p-6 sm:p-8">
+            <dl className="divide-y divide-line text-[13px]">
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-muted">مبلغ</dt>
+                <dd className="font-semibold text-ink">{money(data.amount)}</dd>
               </div>
-              {donation?.amount && (
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="text-muted">مبلغ</dt>
-                  <dd className="font-medium text-ink">{money(donation.amount)}</dd>
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-muted">پروژه</dt>
+                <dd className="text-ink">{data.project_title || 'کلیه فعالیت‌ها'}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-muted">کد پیگیری</dt>
+                <dd className="font-mono text-[13px] tracking-widest text-ink">{data.tracking_code}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-muted">تاریخ ثبت</dt>
+                <dd className="text-ink">{formatDateTime(data.created_at)}</dd>
+              </div>
+              {data.paid_at && (
+                <div className="flex items-center justify-between gap-4 py-3">
+                  <dt className="text-muted">تاریخ تأیید آزمایشی</dt>
+                  <dd className="text-ink">{formatDateTime(data.paid_at)}</dd>
                 </div>
               )}
-              {donation?.project_title && (
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="text-muted">پروژه</dt>
-                  <dd className="text-ink">{donation.project_title}</dd>
-                </div>
-              )}
-              {donation?.created_at && (
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="text-muted">تاریخ ثبت</dt>
-                  <dd className="text-ink">{formatDateTime(donation.created_at)}</dd>
-                </div>
-              )}
-              {donation?.paid_at && (
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="text-muted">تاریخ تأیید</dt>
-                  <dd className="text-ink">{formatDateTime(donation.paid_at)}</dd>
-                </div>
-              )}
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-muted">وضعیت</dt>
+                <dd className="text-ink">
+                  {paid ? 'پرداخت شبیه‌سازی‌شده' : canceled ? 'لغوشده' : 'در انتظار پرداخت'}
+                </dd>
+              </div>
             </dl>
 
+            {paid && (
+              <Notice tone="info" className="mt-5">
+                هیچ مبلغی از حساب شما کسر نشده و این رکورد در آمار «کمک‌های دریافت‌شده» سایت
+                محاسبه نمی‌شود.
+              </Notice>
+            )}
+
             <div className="mt-7 flex flex-wrap gap-3">
-              <Button to="/donate" size="sm">
-                ثبت کمک جدید
-              </Button>
+              {!paid && !canceled && (
+                <Button to={`/donate/checkout/${data.tracking_code}`} size="sm">
+                  ادامه پرداخت آزمایشی
+                </Button>
+              )}
               <Button to="/transparency" variant="outline" size="sm">
-                گزارش شفافیت مالی
+                گزارش‌ها و شفافیت
               </Button>
               <Button to="/" variant="ghost" size="sm">
-                صفحه اصلی
+                بازگشت به صفحه اصلی
               </Button>
+              {paid && (
+                <Button variant="ghost" size="sm" onClick={() => window.print()}>
+                  <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                  چاپ رسید
+                </Button>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
     </section>
   )

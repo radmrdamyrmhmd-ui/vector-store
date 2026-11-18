@@ -23,7 +23,9 @@ export function setSessionCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false,
+    // Behind the preview proxy the request itself is plain HTTP; a secure cookie
+    // there would be dropped, so it is only flagged on an HTTPS deployment.
+    secure: /^https:/i.test(process.env.PUBLIC_BASE_URL || ''),
     maxAge: MAX_AGE,
     path: '/',
   })
@@ -43,19 +45,22 @@ export function readSession(req) {
   }
 }
 
-export async function requireAdmin(req, res, next) {
+// Any signed-in, active user. Access levels are enforced on the server, never
+// only by hiding buttons in the panel.
+export async function requireAuth(req, res, next) {
   const session = readSession(req)
   if (!session?.sub) {
     return res.status(401).json({ error: 'برای دسترسی به این بخش باید وارد شوید.' })
   }
   try {
     const result = await query(
-      'SELECT id, email, name, role FROM users WHERE id = $1',
+      'SELECT id, email, name, role, is_active FROM users WHERE id = $1',
       [session.sub]
     )
     const user = result.rows[0]
-    if (!user || user.role !== 'admin') {
-      return res.status(403).json({ error: 'دسترسی به این بخش فقط برای مدیران مجاز است.' })
+    if (!user || !user.is_active) {
+      clearSessionCookie(res)
+      return res.status(401).json({ error: 'نشست شما معتبر نیست. دوباره وارد شوید.' })
     }
     req.user = user
     next()
@@ -63,3 +68,23 @@ export async function requireAdmin(req, res, next) {
     next(error)
   }
 }
+
+export function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'برای دسترسی به این بخش باید وارد شوید.' })
+    }
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        error: 'سطح دسترسی شما برای این عملیات کافی نیست.',
+      })
+    }
+    next()
+  }
+}
+
+// Backwards-compatible alias: every panel route needs at least a signed-in user.
+export const requireAdmin = requireAuth
+
+export const canWrite = requireRole('admin', 'editor')
+export const adminOnly = requireRole('admin')

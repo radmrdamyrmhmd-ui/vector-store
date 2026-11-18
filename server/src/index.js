@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import express from 'express'
 import cookieParser from 'cookie-parser'
-import { initDb } from './db.js'
+import { initDb, query } from './db.js'
+import { publicBaseUrl } from './payments.js'
 import publicRoutes from './routes/public.js'
 import authRoutes from './routes/auth.js'
 import adminRoutes from './routes/admin.js'
@@ -17,6 +18,15 @@ app.disable('x-powered-by')
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 
+// Conservative hardening headers. No X-Frame-Options: the app is intentionally
+// rendered inside the editor preview iframe.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none')
+  next()
+})
+
 app.use(
   '/uploads',
   express.static(uploadDir, {
@@ -26,6 +36,86 @@ app.use(
     },
   })
 )
+
+/* --------------------------------- sitemap -------------------------------- */
+
+const STATIC_PATHS = [
+  '/',
+  '/about',
+  '/mission',
+  '/activities',
+  '/projects',
+  '/donate',
+  '/transparency',
+  '/stories',
+  '/volunteer',
+  '/contact',
+  '/privacy',
+  '/terms',
+]
+
+const escapeXml = (value) =>
+  String(value).replace(/[<>&'"]/g, (char) => `&#${char.charCodeAt(0)};`)
+
+app.get('/robots.txt', (_req, res) => {
+  res
+    .type('text/plain')
+    .send(
+      [
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /admin',
+        'Disallow: /donate/checkout',
+        'Disallow: /donate/result',
+        '',
+        `Sitemap: ${publicBaseUrl()}/sitemap.xml`,
+        '',
+      ].join('\n')
+    )
+})
+
+app.get('/sitemap.xml', async (_req, res) => {  const base = publicBaseUrl()
+  try {
+    const [projects, stories, pages] = await Promise.all([
+      query('SELECT slug FROM projects WHERE is_active = true ORDER BY sort, id'),
+      query('SELECT slug, published_at FROM stories WHERE is_published = true ORDER BY published_at DESC'),
+      query('SELECT slug, updated_at FROM pages WHERE is_published = true'),
+    ])
+    const urls = [
+      ...STATIC_PATHS.map((path) => ({ loc: `${base}${path}`, priority: path === '/' ? '1.0' : '0.8' })),
+      ...projects.rows.map((row) => ({ loc: `${base}/projects/${row.slug}`, priority: '0.7' })),
+      ...stories.rows.map((row) => ({
+        loc: `${base}/stories/${row.slug}`,
+        lastmod: row.published_at?.toISOString?.().slice(0, 10),
+        priority: '0.6',
+      })),
+      // Seeded pages live on their own route; anything else is served at /p/:slug.
+      ...pages.rows
+        .filter((row) => !['privacy', 'terms'].includes(row.slug))
+        .map((row) => ({
+          loc: `${base}/p/${row.slug}`,
+          lastmod: row.updated_at?.toISOString?.().slice(0, 10),
+          priority: '0.4',
+        })),
+    ]
+    const body = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls
+  .map(
+    (item) =>
+      `  <url><loc>${escapeXml(item.loc)}</loc>${
+        item.lastmod ? `<lastmod>${item.lastmod}</lastmod>` : ''
+      }<priority>${item.priority}</priority></url>`
+  )
+  .join('\n')}
+</urlset>
+`
+    res.type('application/xml').send(body)
+  } catch (error) {
+    console.error('[sitemap] could not build', error)
+    res.status(500).type('text/plain').send('sitemap unavailable')
+  }
+})
 
 app.use('/api/auth', authRoutes)
 app.use('/api/admin', adminRoutes)

@@ -22,6 +22,8 @@ const TEXT_FIELDS = [
   { key: 'whatsapp', label: 'واتساپ (نشانی کامل)' },
   { key: 'footer_about', label: 'معرفی در فوتر', area: true, full: true },
   { key: 'legal_owner', label: 'نام حقوقی در فوتر' },
+  { key: 'demo_note', label: 'متن نوار نمونه‌کار (بالای همه صفحات)', area: true, full: true },
+  { key: 'donation_notice', label: 'توضیح پرداخت شبیه‌سازی‌شده (صفحه حمایت مالی)', area: true, full: true },
 ]
 
 export default function AdminSettings() {
@@ -115,6 +117,27 @@ export default function AdminSettings() {
               onChange={(url) => setForm((prev) => ({ ...prev, about_image: url }))}
             />
           </div>
+        </Panel>
+
+        <Panel
+          title="حالت نمونه‌کار"
+          description="وقتی روشن است، در بالای همه صفحات و در فوتر نوشته می‌شود که این سایت نمایشی است."
+        >
+          <label className="flex items-start gap-3 text-[12.5px] leading-6 text-ink">
+            <input
+              type="checkbox"
+              checked={form.demo_mode !== false}
+              onChange={(event) => setForm((prev) => ({ ...prev, demo_mode: event.target.checked }))}
+              className="mt-1 h-4 w-4 accent-brand"
+            />
+            <span>
+              نمایش پیام «نمونه‌کار نمایشی» در سایت
+              <span className="mt-1 block text-[11px] text-muted">
+                خاموش‌کردن این گزینه فقط در نسخه واقعی و پس از جایگزینی همه داده‌های نمونه توصیه
+                می‌شود.
+              </span>
+            </span>
+          </label>
         </Panel>
 
         <Panel title="آمار شفافیت">
