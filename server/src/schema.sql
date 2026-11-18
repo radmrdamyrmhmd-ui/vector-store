@@ -174,3 +174,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS audit_created_idx ON audit_log(created_at DESC);
+
+-- Shared, durable request counters (see server/src/rate-limit.js). Living in the
+-- database means every API process shares the same window and a restart does not
+-- reset an attacker's quota.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  window_start TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS rate_limits_window_idx ON rate_limits(window_start);
+
+-- Bumped whenever a password changes, so older session tokens stop being valid.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;

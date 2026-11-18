@@ -6,6 +6,9 @@ import { publicBaseUrl } from './payments.js'
 import publicRoutes from './routes/public.js'
 import authRoutes from './routes/auth.js'
 import adminRoutes from './routes/admin.js'
+import { socialPreview } from './prerender.js'
+import { checkProductionConfig } from './config.js'
+import { pruneRateLimits } from './rate-limit.js'
 
 const app = express()
 const port = Number(process.env.PORT || 8000)
@@ -24,6 +27,11 @@ app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
   res.setHeader('X-Permitted-Cross-Domain-Policies', 'none')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  // Only announced when the deployment is actually served over HTTPS.
+  if (/^https:/i.test(publicBaseUrl())) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
   next()
 })
 
@@ -117,6 +125,10 @@ ${urls
   }
 })
 
+// Social crawlers get per-page Open Graph tags for the public routes; everyone
+// else (and every search engine) continues to the normal application.
+app.use(socialPreview)
+
 app.use('/api/auth', authRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api', publicRoutes)
@@ -132,6 +144,10 @@ app.use((error, _req, res, _next) => {
 
 initDb()
   .then(() => {
+    checkProductionConfig()
+    pruneRateLimits()
+    // Expired counters are removed periodically so the table stays small.
+    setInterval(pruneRateLimits, 10 * 60 * 1000).unref()
     app.listen(port, '0.0.0.0', () => {
       console.log(`[api] listening on 0.0.0.0:${port}`)
     })

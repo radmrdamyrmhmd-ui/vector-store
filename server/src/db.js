@@ -3,6 +3,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import bcrypt from 'bcryptjs'
+import {
+  demoMode,
+  demoModeExplicit,
+  isProduction,
+  isUsableAdminPassword,
+} from './config.js'
 
 const { Pool } = pg
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -42,9 +48,9 @@ const DEFAULT_SITE = {
   legal_owner: 'مجموعه همراهان امید',
   people_supported: null,
   last_updated: null,
-  // This build is a portfolio demonstration. The ribbon tells every visitor that
-  // the organisation is not operating and that the numbers are sample data.
-  demo_mode: true,
+  // Demo mode is a deployment switch (DEMO_MODE), never a built-in default:
+  // production runs with it off unless an operator turns it on explicitly.
+  demo_mode: demoMode,
   demo_note:
     'این وب‌سایت یک نمونه‌کار نمایشی است؛ «همراهان امید» یک مؤسسه فعال نیست و محتوای آن نمونه است.',
   donation_notice:
@@ -308,17 +314,35 @@ async function seed() {
   try {
     await client.query('BEGIN')
 
-    const adminEmail = (process.env.ADMIN_EMAIL || 'admin@hamrahanomid.ir').toLowerCase()
-    const adminPassword = process.env.ADMIN_PASSWORD || 'Hamrahan1404!'
-    const existingAdmin = await client.query('SELECT id FROM users WHERE email = $1', [
-      adminEmail,
-    ])
-    if (existingAdmin.rowCount === 0) {
-      const hash = await bcrypt.hash(adminPassword, 10)
-      await client.query(
-        'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4)',
-        [adminEmail, hash, 'مدیر مجموعه', 'admin']
+    // No admin account is created from a built-in password. It comes from the
+    // environment, and in production a placeholder or short password is refused.
+    const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+    const adminPassword = String(process.env.ADMIN_PASSWORD || '')
+    // Development accepts the documented sandbox password; production requires a
+    // real secret that is neither the placeholder nor shorter than 12 characters.
+    const usable =
+      adminEmail && (isProduction ? isUsableAdminPassword(adminPassword) : adminPassword.length >= 8)
+    if (!adminEmail || !adminPassword) {
+      console.warn(
+        '[seed] ADMIN_EMAIL/ADMIN_PASSWORD are not set — no admin account was created from the environment.'
       )
+    } else if (!usable) {
+      console.warn(
+        `[seed] refusing to create an admin account: the configured password is the development placeholder or shorter than 12 characters${
+          isProduction ? ' (production)' : ''
+        }. Set a strong ADMIN_PASSWORD and restart.`
+      )
+    } else {
+      const existingAdmin = await client.query('SELECT id FROM users WHERE email = $1', [
+        adminEmail,
+      ])
+      if (existingAdmin.rowCount === 0) {
+        const hash = await bcrypt.hash(adminPassword, 10)
+        await client.query(
+          'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4)',
+          [adminEmail, hash, 'مدیر مجموعه', 'admin']
+        )
+      }
     }
 
     // Defaults are merged under the stored value so a new default key reaches an
@@ -328,6 +352,15 @@ async function seed() {
        ON CONFLICT (key) DO UPDATE SET value = $2::jsonb || settings.value`,
       ['site', JSON.stringify(DEFAULT_SITE)]
     )
+
+    // When DEMO_MODE is set explicitly it wins over the stored value, so a
+    // production deployment can never be left showing sample-data banners.
+    if (demoModeExplicit) {
+      await client.query(
+        `UPDATE settings SET value = jsonb_set(value, '{demo_mode}', $1::jsonb) WHERE key = 'site'`,
+        [JSON.stringify(demoMode)]
+      )
+    }
 
     const activityCount = await client.query('SELECT count(*)::int AS c FROM activities')
     if (activityCount.rows[0].c === 0) {

@@ -57,13 +57,10 @@ export default function AdminLogin() {
 
           {settings.demo_mode !== false && (
             <Notice tone="info" className="mt-4">
-              <p className="font-medium">حساب نمایشی این نمونه‌کار</p>
-              <p className="mt-1 font-mono text-[11.5px]" dir="ltr">
-                admin@hamrahanomid.ir / Hamrahan1404!
-              </p>
-              <p className="mt-1 text-[11px]">
-                این حساب فقط برای بازدید نمونه است. در استقرار واقعی، رمز آن را از بخش تنظیمات تغییر
-                دهید.
+              <p className="font-medium">نسخه نمایشی</p>
+              <p className="mt-1 text-[11px] leading-6">
+                این نسخه برای نمایش نمونه‌کار است. ورود فقط با حساب مدیری ممکن است که از طریق
+                متغیرهای محیطی سرور تعریف شده است؛ اطلاعات ورود در این صفحه نمایش داده نمی‌شود.
               </p>
             </Notice>
           )}

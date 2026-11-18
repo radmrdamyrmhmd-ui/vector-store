@@ -55,7 +55,7 @@ export default [
     },
   },
   {
-    files: ['src/**/*.test.{js,jsx}', 'src/test/**/*.js'],
+    files: ['src/**/*.test.{js,jsx}', 'src/test/**/*.js', 'server/src/**/*.test.js'],
     languageOptions: { globals: { ...globals.node, ...testGlobals } },
   },
 ]

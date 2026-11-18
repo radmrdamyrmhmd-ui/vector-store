@@ -27,8 +27,16 @@ empty: the admin user, `settings.site` (all site copy), 4 activity areas and the
 from the brief. Sample projects intentionally have **no target amount** so the UI shows
 «اطلاعات در حال به‌روزرسانی است» instead of invented numbers.
 
-Admin credentials: `ADMIN_EMAIL` / `ADMIN_PASSWORD` (defaults in `.env.base44-defaults`,
-overridable by `/run/base44/app.env`). Change the password from the admin panel.
+Admin credentials come from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (sandbox defaults in
+`.env.base44-defaults`, overridable by `/run/base44/app.env`). No built-in password exists: with
+`NODE_ENV=production` the sandbox placeholder and any password under 12 characters are refused, so
+no admin account is created from them. `DEMO_MODE` (`true` in the sandbox defaults, off otherwise)
+drives the sample-content ribbon and simulated payments and overrides the panel toggle.
+
+Rate limiting (`server/src/rate-limit.js`) is a Postgres fixed-window counter in `rate_limits`, so it
+is shared across processes and survives restarts. Login, password change, contact, volunteer,
+donation, tracking lookup and the whole admin API are limited; over-limit answers `429` +
+`Retry-After`. The table is pruned every 10 minutes.
 
 ## Gotchas
 
@@ -63,5 +71,18 @@ docker exec app-web-1 sh -c "cd /workspace && npm run lint"  # eslint src server
 ```
 
 `src/lib/phone.js` is the single source of phone validation on the client
-(`isValidPhone`, `normalizePhone`, `phoneInputValue`); the API keeps its own copy in
-`server/src/routes/public.js`. Tests live next to the code (`*.test.js(x)`).
+(`isValidPhone`, `normalizePhone`, `phoneInputValue`); `server/src/lib/phone.js` is the same logic on
+the API, which is the authority. `src/lib/phone.parity.test.js` fails if the two ever disagree.
+Tests live next to the code (`*.test.js(x)`), including `server/src/**/*.test.js`.
+
+Other server modules worth knowing:
+
+- `server/src/lib/slug.js` — Persian → ASCII slug transliteration. Slugs are deterministic, and a
+  PUT without an explicit slug keeps the current one, so published URLs never move.
+- `server/src/prerender.js` — per-page Open Graph/Twitter tags for social crawlers only (search
+  engines keep getting the SPA shell). Mounted on the API, so a production reverse proxy must send
+  social-bot requests to the API; see `docs/DEPLOYMENT.md`.
+- `server/src/config.js` — `DEMO_MODE`, production password rules and boot-time warnings.
+- Session tokens carry `sv`; `users.session_version` is bumped on a password change, which signs out
+  every older session (`/api/auth/me` included).
+- The `viewer` role cannot read donor/volunteer/contact personal data or mutate anything.

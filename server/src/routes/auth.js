@@ -9,44 +9,33 @@ import {
   signToken,
 } from '../auth.js'
 import { ROLES, logEvent } from '../audit.js'
+import { rateLimit } from '../rate-limit.js'
 
 const router = Router()
 
-// In-memory throttle: 8 failed attempts per 10 minutes per IP + email pair.
-const attempts = new Map()
-const WINDOW = 10 * 60 * 1000
-const LIMIT = 8
+const LOGIN_WINDOW = 10 * 60 * 1000
 
-function tooManyAttempts(key) {
-  const entry = attempts.get(key)
-  if (!entry) return false
-  if (Date.now() - entry.first > WINDOW) {
-    attempts.delete(key)
-    return false
-  }
-  return entry.count >= LIMIT
-}
+// Durable counters (Postgres, shared by every API process): 8 attempts per
+// IP + email and 20 attempts per IP in ten minutes. Ordinary users never reach
+// either limit; a password-guessing script does almost immediately.
+const perAccount = rateLimit({
+  name: 'login-account',
+  limit: 8,
+  windowMs: LOGIN_WINDOW,
+  key: (req) => `${req.ip}:${String(req.body?.email || '').trim().toLowerCase()}`,
+  message: 'تعداد تلاش‌های ورود زیاد بوده است. لطفاً چند دقیقه بعد دوباره امتحان کنید.',
+})
+const perIp = rateLimit({
+  name: 'login-ip',
+  limit: 20,
+  windowMs: LOGIN_WINDOW,
+  message: 'تعداد تلاش‌های ورود از این دستگاه زیاد بوده است. لطفاً چند دقیقه بعد دوباره امتحان کنید.',
+})
 
-function noteFailure(key) {
-  const entry = attempts.get(key)
-  if (!entry || Date.now() - entry.first > WINDOW) {
-    attempts.set(key, { count: 1, first: Date.now() })
-  } else {
-    entry.count += 1
-  }
-}
-
-router.post('/login', async (req, res, next) => {
-  const ip = req.ip || 'unknown'
+router.post('/login', perIp, perAccount, async (req, res, next) => {
   const email = String(req.body?.email || '').trim().toLowerCase()
   const password = String(req.body?.password || '')
-  const key = `${ip}:${email}`
   try {
-    if (tooManyAttempts(key)) {
-      return res.status(429).json({
-        error: 'تعداد تلاش‌های ناموفق زیاد بوده است. لطفاً چند دقیقه بعد دوباره امتحان کنید.',
-      })
-    }
     if (!email || !password) {
       return res.status(400).json({ error: 'ایمیل و رمز عبور را وارد کنید.' })
     }
@@ -55,7 +44,6 @@ router.post('/login', async (req, res, next) => {
     const user = result.rows[0]
     const valid = user ? await bcrypt.compare(password, user.password_hash) : false
     if (!user || !valid || !user.is_active || !ROLES.includes(user.role)) {
-      noteFailure(key)
       await logEvent({
         req,
         action: 'login_failed',
@@ -66,7 +54,6 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'ایمیل یا رمز عبور نادرست است.' })
     }
 
-    attempts.delete(key)
     await query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id])
     setSessionCookie(res, signToken(user))
     await logEvent({
@@ -98,16 +85,33 @@ router.get('/me', async (req, res, next) => {
   if (!session?.sub) return res.json({ user: null })
   try {
     const result = await query(
-      'SELECT id, email, name, role FROM users WHERE id = $1 AND is_active = true',
+      'SELECT id, email, name, role, is_active, session_version FROM users WHERE id = $1',
       [session.sub]
     )
-    res.json({ user: result.rows[0] || null })
+    const user = result.rows[0]
+    // A session issued before the last password change is no longer valid.
+    if (
+      !user ||
+      !user.is_active ||
+      Number(session.sv || 0) !== Number(user.session_version || 0)
+    ) {
+      clearSessionCookie(res)
+      return res.json({ user: null })
+    }
+    res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } })
   } catch (error) {
     next(error)
   }
 })
 
-router.post('/password', requireAuth, async (req, res, next) => {
+const passwordLimiter = rateLimit({
+  name: 'password-change',
+  limit: 6,
+  windowMs: 10 * 60 * 1000,
+  key: (req) => `${req.ip}:${req.user?.id || 'anonymous'}`,
+})
+
+router.post('/password', requireAuth, passwordLimiter, async (req, res, next) => {
   try {
     const currentPassword = String(req.body?.current_password || '')
     const newPassword = String(req.body?.new_password || '')
@@ -123,9 +127,19 @@ router.post('/password', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'رمز عبور فعلی نادرست است.' })
     }
     const hash = await bcrypt.hash(newPassword, 10)
-    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id])
+    // Bumping session_version signs out every other session that used the old
+    // password; this browser gets a fresh cookie so the change is not disruptive.
+    const updated = await query(
+      `UPDATE users SET password_hash = $1, session_version = session_version + 1
+       WHERE id = $2 RETURNING session_version`,
+      [hash, req.user.id]
+    )
+    setSessionCookie(
+      res,
+      signToken({ ...req.user, session_version: updated.rows[0].session_version })
+    )
     await logEvent({ req, action: 'password_changed', entity: 'users', entityId: req.user.id })
-    res.json({ message: 'رمز عبور با موفقیت تغییر کرد.' })
+    res.json({ message: 'رمز عبور با موفقیت تغییر کرد. سایر نشست‌های فعال بسته شدند.' })
   } catch (error) {
     next(error)
   }

@@ -70,14 +70,23 @@ export function useSeo({
     setMeta('property', 'og:title', fullTitle)
     setMeta('property', 'og:description', description)
     setMeta('property', 'og:url', canonical)
-    if (image) setMeta('property', 'og:image', image.startsWith('http') ? image : `${siteUrl()}${image}`)
 
-    setMeta('name', 'twitter:card', image ? 'summary_large_image' : 'summary')
+    // Every page shares a real preview image: the page's own picture when it has
+    // one, otherwise the site card. Without this a shared link rendered blank.
+    const ogImage = image
+      ? image.startsWith('http')
+        ? image
+        : `${siteUrl()}${image}`
+      : `${siteUrl()}/og-image.png`
+    setMeta('property', 'og:image', ogImage)
+    setMeta('property', 'og:image:width', '1200')
+    setMeta('property', 'og:image:height', '630')
+    setMeta('property', 'og:image:alt', fullTitle)
+
+    setMeta('name', 'twitter:card', 'summary_large_image')
     setMeta('name', 'twitter:title', fullTitle)
     setMeta('name', 'twitter:description', description)
-    if (image) {
-      setMeta('name', 'twitter:image', image.startsWith('http') ? image : `${siteUrl()}${image}`)
-    }
+    setMeta('name', 'twitter:image', ogImage)
 
     setJsonLd('seo-jsonld', jsonLd || null)
   }, [title, description, path, image, type, jsonLd, noindex])

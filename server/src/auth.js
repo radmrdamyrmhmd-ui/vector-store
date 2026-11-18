@@ -14,9 +14,18 @@ export const COOKIE_NAME = 'ho_session'
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000
 
 export function signToken(user) {
-  return jwt.sign({ sub: user.id, email: user.email, role: user.role }, SECRET, {
-    expiresIn: '7d',
-  })
+  return jwt.sign(
+    {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      // Session generation: a password change bumps users.session_version, which
+      // invalidates every token issued before it.
+      sv: Number(user.session_version || 0),
+    },
+    SECRET,
+    { expiresIn: '7d' }
+  )
 }
 
 export function setSessionCookie(res, token) {
@@ -54,11 +63,15 @@ export async function requireAuth(req, res, next) {
   }
   try {
     const result = await query(
-      'SELECT id, email, name, role, is_active FROM users WHERE id = $1',
+      'SELECT id, email, name, role, is_active, session_version FROM users WHERE id = $1',
       [session.sub]
     )
     const user = result.rows[0]
-    if (!user || !user.is_active) {
+    if (
+      !user ||
+      !user.is_active ||
+      Number(session.sv || 0) !== Number(user.session_version || 0)
+    ) {
       clearSessionCookie(res)
       return res.status(401).json({ error: 'نشست شما معتبر نیست. دوباره وارد شوید.' })
     }

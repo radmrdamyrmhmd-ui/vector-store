@@ -5,14 +5,19 @@ import { Router } from 'express'
 import multer from 'multer'
 import bcrypt from 'bcryptjs'
 import { query } from '../db.js'
-import { adminOnly, canWrite, requireAuth } from '../auth.js'
+import { adminOnly, canWrite, requireAuth, requireRole } from '../auth.js'
 import { ROLES, auditMiddleware, logEvent } from '../audit.js'
+import { rateLimit } from '../rate-limit.js'
+import { toSlug } from '../lib/slug.js'
 
 const router = Router()
 
 // Every panel request needs a signed-in, active user; the access level is
 // enforced here, on the server, for every mutation.
 router.use(requireAuth)
+// Generous ceiling for a real editing session (the panel loads several lists at
+// once), but enough to blunt scripted scraping of the panel API.
+router.use(rateLimit({ name: 'admin-api', limit: 300, windowMs: 60 * 1000 }))
 router.use(auditMiddleware)
 router.use((req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') return next()
@@ -57,16 +62,11 @@ const SETTINGS_TEXT_KEYS = [
   'donation_notice',
 ]
 
+// Persian titles are transliterated to a stable ASCII slug (server/src/lib/slug.js),
+// so a published URL never changes between edits and stays readable for crawlers.
 function slugify(value, prefix) {
-  const normalized = String(value || '')
-    .toLowerCase()
-    .trim()
-    .replace(/[\s_]+/g, '-')
-    .replace(/[^a-z0-9-\u0600-\u06FF]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-  const latin = normalized.replace(/[^a-z0-9-]/g, '')
-  if (latin.length >= 3) return latin
+  const slug = toSlug(value)
+  if (slug.length >= 3) return slug
   return `${prefix}-${crypto.randomBytes(3).toString('hex')}`
 }
 
@@ -133,8 +133,9 @@ router.post('/upload', (req, res) => {
   })
 })
 
-router.get('/stats', async (_req, res, next) => {
+router.get('/stats', async (req, res, next) => {
   try {
+    const canSeePersonalData = ['admin', 'editor'].includes(req.user?.role)
     const [counts, donations, recentDonations, recentVolunteers] = await Promise.all([
       query(`
         SELECT
@@ -169,8 +170,8 @@ router.get('/stats', async (_req, res, next) => {
         paid_count: donations.rows[0].paid_count,
         pending_count: donations.rows[0].pending_count,
       },
-      recentDonations: recentDonations.rows,
-      recentVolunteers: recentVolunteers.rows,
+      recentDonations: canSeePersonalData ? recentDonations.rows : [],
+      recentVolunteers: canSeePersonalData ? recentVolunteers.rows : [],
     })
   } catch (error) {
     next(error)
@@ -231,7 +232,10 @@ router.put('/projects/:id', async (req, res, next) => {
     if (title.length < 3) {
       return res.status(400).json({ error: 'عنوان پروژه را وارد کنید.' })
     }
-    const slug = await uniqueSlug('projects', req.body?.slug || title, 'project', id)
+    const current = await query('SELECT slug FROM projects WHERE id = $1', [id])
+    if (current.rowCount === 0) return res.status(404).json({ error: 'پروژه پیدا نشد.' })
+    // The slug is the public URL: editing the title must not change it.
+    const slug = await uniqueSlug('projects', req.body?.slug || current.rows[0].slug, 'project', id)
     const result = await query(
       `UPDATE projects SET slug=$1, title=$2, summary=$3, description=$4, image_url=$5,
         target_amount=$6, location=$7, status=$8, is_active=$9, sort=$10, is_sample=$11, meta_description=$12
@@ -309,7 +313,9 @@ router.put('/activities/:id', async (req, res, next) => {
     const id = Number(req.params.id)
     const title = clean(req.body?.title, 140)
     if (title.length < 3) return res.status(400).json({ error: 'عنوان حوزه فعالیت را وارد کنید.' })
-    const slug = await uniqueSlug('activities', req.body?.slug || title, 'activity', id)
+    const current = await query('SELECT slug FROM activities WHERE id = $1', [id])
+    if (current.rowCount === 0) return res.status(404).json({ error: 'حوزه فعالیت پیدا نشد.' })
+    const slug = await uniqueSlug('activities', req.body?.slug || current.rows[0].slug, 'activity', id)
     const result = await query(
       `UPDATE activities SET slug=$1, title=$2, summary=$3, body=$4, icon=$5, image_url=$6, sort=$7, is_active=$8
        WHERE id=$9 RETURNING *`,
@@ -400,7 +406,9 @@ router.put('/stories/:id', async (req, res, next) => {
     const id = Number(req.params.id)
     const payload = storyPayload(req.body, true)
     if (payload.title.length < 3) return res.status(400).json({ error: 'عنوان مقاله را وارد کنید.' })
-    const slug = await uniqueSlug('stories', req.body?.slug || payload.title, 'story', id)
+    const current = await query('SELECT slug FROM stories WHERE id = $1', [id])
+    if (current.rowCount === 0) return res.status(404).json({ error: 'مقاله پیدا نشد.' })
+    const slug = await uniqueSlug('stories', req.body?.slug || current.rows[0].slug, 'story', id)
     const result = await query(
       `UPDATE stories SET slug=$1, title=$2, excerpt=$3, body=$4, image_url=$5, author=$6,
         category=$7, published_at=$8, is_published=$9, is_sample=$10, meta_description=$11
@@ -504,7 +512,11 @@ router.delete('/reports/:id', async (req, res, next) => {
 
 /* --------------------------- incoming requests --------------------------- */
 
-router.get('/donations', async (req, res, next) => {
+// Personal data of donors and volunteers is not readable by the read-only
+// "viewer" role; it needs an editor or an admin.
+const piiReaders = requireRole('admin', 'editor')
+
+router.get('/donations', piiReaders, async (req, res, next) => {
   try {
     const status = clean(req.query.status, 20)
     const params = []
@@ -532,7 +544,7 @@ router.get('/donations', async (req, res, next) => {
   }
 })
 
-router.get('/volunteers', async (_req, res, next) => {
+router.get('/volunteers', piiReaders, async (_req, res, next) => {
   try {
     const result = await query('SELECT * FROM volunteers ORDER BY created_at DESC')
     res.json(result.rows)
@@ -563,7 +575,7 @@ router.delete('/volunteers/:id', async (req, res, next) => {
   }
 })
 
-router.get('/messages', async (_req, res, next) => {
+router.get('/messages', piiReaders, async (_req, res, next) => {
   try {
     const result = await query('SELECT * FROM contact_messages ORDER BY created_at DESC')
     res.json(result.rows)
@@ -593,7 +605,7 @@ router.delete('/messages/:id', async (req, res, next) => {
   }
 })
 
-router.get('/subscribers', async (_req, res, next) => {
+router.get('/subscribers', piiReaders, async (_req, res, next) => {
   try {
     const result = await query('SELECT id, email, created_at FROM newsletter_subscribers ORDER BY created_at DESC')
     res.json(result.rows)

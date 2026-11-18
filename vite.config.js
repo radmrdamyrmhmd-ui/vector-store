@@ -22,8 +22,10 @@ export default defineConfig({
     strictPort: true,
     allowedHosts,
     watch: { usePolling: true, interval: 400 },
+    // `xfwd` forwards the visitor's address, so per-IP rate limits on the API
+    // count each visitor instead of the dev-server proxy as one client.
     proxy: {
-      '/api': { target: apiTarget, changeOrigin: false },
+      '/api': { target: apiTarget, changeOrigin: false, xfwd: true },
       '/uploads': { target: apiTarget, changeOrigin: false },
       // SEO files are generated from the database by the API.
       '/sitemap.xml': { target: apiTarget, changeOrigin: false },

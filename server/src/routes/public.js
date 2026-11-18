@@ -7,6 +7,8 @@ import {
   publicBaseUrl,
   verifyPayment,
 } from '../payments.js'
+import { isValidPhone, normalizePhone, toLatinDigits } from '../lib/phone.js'
+import { rateLimit } from '../rate-limit.js'
 
 const router = Router()
 
@@ -21,18 +23,9 @@ const INTERESTS = [
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max)
 const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)
-const isPhone = (value) => /^0?9\d{9}$/.test(value.replace(/[\s-]/g, ''))
-// A Persian keyboard produces ۰-۹; every numeric field is normalised first.
-const latinDigits = (value) =>
-  String(value ?? '')
-    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
-    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
-const normalizePhone = (value) => {
-  const digits = latinDigits(value).replace(/[^\d]/g, '')
-  return digits.startsWith('98') ? `0${digits.slice(2)}` : digits.startsWith('9') ? `0${digits}` : digits
-}
 const toAmount = (value) => {
-  const digits = latinDigits(value).replace(/[^\d]/g, '')
+  // A Persian keyboard produces ۰-۹; every numeric field is normalised first.
+  const digits = toLatinDigits(value).replace(/[^\d]/g, '')
   const amount = Number(digits)
   return Number.isFinite(amount) ? amount : 0
 }
@@ -52,29 +45,10 @@ const PROJECT_FIELDS = `
   (SELECT count(*) FROM donations d WHERE d.project_id = p.id AND d.status = 'paid' AND d.simulated = false)::int AS donors_count
 `
 
-// Small in-memory flood guard for the public write endpoints.
-const buckets = new Map()
-function tooManyRequests(key, limit, windowMs) {
-  const now = Date.now()
-  const entry = buckets.get(key)
-  if (!entry || now - entry.first > windowMs) {
-    buckets.set(key, { count: 1, first: now })
-    return false
-  }
-  entry.count += 1
-  return entry.count > limit
-}
-function guard(action, limit, windowMs) {
-  return (req, res, next) => {
-    const key = `${action}:${req.ip || 'unknown'}`
-    if (tooManyRequests(key, limit, windowMs)) {
-      return res
-        .status(429)
-        .json({ error: 'تعداد درخواست‌ها زیاد است. چند دقیقه بعد دوباره تلاش کنید.' })
-    }
-    next()
-  }
-}
+// Flood guard for the public write endpoints. Counters live in Postgres
+// (server/src/rate-limit.js), so they are shared across processes and survive a
+// restart instead of resetting with an in-memory map.
+const guard = (action, limit, windowMs) => rateLimit({ name: action, limit, windowMs })
 
 async function impact() {
   const settings = await getSettings()
@@ -275,7 +249,7 @@ router.post('/donations', guard('donation', 15, 10 * 60 * 1000), async (req, res
     if (!isAnonymous && donorName.length < 3) {
       return res.status(400).json({ error: 'نام و نام خانوادگی را کامل وارد کنید.' })
     }
-    if (!isPhone(donorPhone)) {
+    if (!isValidPhone(donorPhone)) {
       return res.status(400).json({ error: 'شماره موبایل معتبر نیست. نمونه: ۰۹۱۲۳۴۵۶۷۸۹' })
     }
 
@@ -348,7 +322,8 @@ const DONATION_SELECT = `
   FROM donations d LEFT JOIN projects p ON p.id = d.project_id
 `
 
-router.get('/donations/:tracking', async (req, res, next) => {
+// Tracking codes are short, so lookups are rate limited to stop enumeration.
+router.get('/donations/:tracking', guard('tracking', 60, 10 * 60 * 1000), async (req, res, next) => {
   try {
     const result = await query(`${DONATION_SELECT} WHERE d.tracking_code = $1`, [
       clean(req.params.tracking, 40).toUpperCase(),
@@ -404,18 +379,22 @@ router.post(
   }
 )
 
-router.post('/donations/:tracking/cancel', async (req, res, next) => {
-  try {
-    const tracking = clean(req.params.tracking, 40).toUpperCase()
-    await query(
-      "UPDATE donations SET status = 'canceled' WHERE tracking_code = $1 AND status = 'pending'",
-      [tracking]
-    )
-    res.json({ ok: true })
-  } catch (error) {
-    next(error)
+router.post(
+  '/donations/:tracking/cancel',
+  guard('cancel', 20, 10 * 60 * 1000),
+  async (req, res, next) => {
+    try {
+      const tracking = clean(req.params.tracking, 40).toUpperCase()
+      await query(
+        "UPDATE donations SET status = 'canceled' WHERE tracking_code = $1 AND status = 'pending'",
+        [tracking]
+      )
+      res.json({ ok: true })
+    } catch (error) {
+      next(error)
+    }
   }
-})
+)
 
 // Gateway return URL. The donation is marked paid only after the gateway itself
 // confirms the authority — never from query-string flags alone.
@@ -475,7 +454,7 @@ router.post('/volunteers', guard('volunteer', 8, 10 * 60 * 1000), async (req, re
     if (fullName.length < 3) {
       return res.status(400).json({ error: 'نام و نام خانوادگی را کامل وارد کنید.' })
     }
-    if (!isPhone(phone)) {
+    if (!isValidPhone(phone)) {
       return res.status(400).json({ error: 'شماره تماس معتبر نیست. نمونه: ۰۹۱۲۳۴۵۶۷۸۹' })
     }
     if (email && !isEmail(email)) {
@@ -512,7 +491,7 @@ router.post('/contact', guard('contact', 8, 10 * 60 * 1000), async (req, res, ne
     if (!phone && !email) {
       return res.status(400).json({ error: 'برای پاسخ‌گویی، شماره تماس یا ایمیل را وارد کنید.' })
     }
-    if (phone && !isPhone(normalizePhone(phone))) {
+    if (phone && !isValidPhone(normalizePhone(phone))) {
       return res.status(400).json({ error: 'شماره تماس معتبر نیست.' })
     }
     if (email && !isEmail(email)) {
