@@ -3,7 +3,7 @@ import { useSettings } from '../lib/site.jsx'
 import { PageHero, SectionHead } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import Reveal from '../components/Reveal.jsx'
-import { useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 const OBJECTIVES = [
   {
@@ -51,6 +51,18 @@ export default function Mission() {
     description:
       'مأموریت، اهداف و اصول کاری بنیاد همراهان امید در آموزش، توانمندسازی و حمایت اجتماعی.',
     path: '/mission',
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'مأموریت و اهداف',
+        description:
+          'مأموریت، اهداف و اصول کاری بنیاد همراهان امید در آموزش، توانمندسازی و حمایت اجتماعی.',
+        path: '/mission',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'مأموریت و اهداف', to: '/mission' },
+      ])
+    ),
   })
 
   const settings = useSettings()

@@ -5,12 +5,14 @@ import { useAuth } from '../../lib/auth.jsx'
 import { useSettings } from '../../lib/site.jsx'
 import { Button, Field, Input, Notice } from '../../components/ui.jsx'
 import { Logo } from '../../components/Art.jsx'
+import { useSeo } from '../../lib/seo.jsx'
 
 export default function AdminLogin() {
   const { user, loading, login } = useAuth()
   const settings = useSettings()
   const navigate = useNavigate()
   const location = useLocation()
+  useSeo({ title: 'ورود مدیران', noindex: true, path: '/admin/login' })
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')

@@ -23,6 +23,8 @@ export function Artwork({
   className,
   ratio = 'aspect-[4/3]',
   rounded = 'rounded-[30px]',
+  // The hero image is the LCP element on the home page: load it eagerly.
+  priority = false,
   children,
 }) {
   const rawId = useId()
@@ -35,7 +37,9 @@ export function Artwork({
         <img
           src={src}
           alt={alt}
-          loading="lazy"
+          loading={priority ? 'eager' : 'lazy'}
+          fetchpriority={priority ? 'high' : 'auto'}
+          decoding="async"
           className="absolute inset-0 h-full w-full object-cover"
         />
         {children}

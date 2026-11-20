@@ -21,6 +21,7 @@ import { useAuth } from '../../lib/auth.jsx'
 import { useSettings } from '../../lib/site.jsx'
 import { Button, Spinner } from '../../components/ui.jsx'
 import { Logo } from '../../components/Art.jsx'
+import { useSeo } from '../../lib/seo.jsx'
 
 const ICONS = {
   dashboard: LayoutDashboard,
@@ -43,6 +44,9 @@ export default function AdminLayout() {
   const settings = useSettings()
   const location = useLocation()
   const navigate = useNavigate()
+
+  // The panel never belongs in search results.
+  useSeo({ title: 'پنل مدیریت', noindex: true, path: location.pathname })
 
   if (loading) {
     return (

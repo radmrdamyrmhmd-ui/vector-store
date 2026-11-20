@@ -5,7 +5,7 @@ import { Artwork } from '../components/Art.jsx'
 import { Empty, PageHero, SectionHead } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import Reveal from '../components/Reveal.jsx'
-import { useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 const ICONS = {
   book: BookOpen,
@@ -27,6 +27,18 @@ export default function Activities() {
     description:
       'چهار حوزه اصلی فعالیت: آموزش کودکان، توانمندسازی زنان، حمایت معیشتی و سلامت.',
     path: '/activities',
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'حوزه‌های فعالیت همراهان امید',
+        description:
+          'چهار حوزه اصلی فعالیت: آموزش کودکان، توانمندسازی زنان، حمایت معیشتی و سلامت.',
+        path: '/activities',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'حوزه‌های فعالیت', to: '/activities' },
+      ])
+    ),
   })
 
   const { activities, loading } = useSite()

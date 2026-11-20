@@ -62,9 +62,12 @@ NODE_ENV=production node server/src/index.js
 نمونه nginx:
 
 ```nginx
-map $http_user_agent $social_bot {
+# Search engines and social previews must reach the API so they receive the
+# server-rendered HTML (title, description, canonical, Open Graph, JSON-LD).
+map $http_user_agent $crawler {
   default 0;
-  ~*(facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot) 1;
+  ~*(googlebot|google-inspectiontool|bingbot|yandex|duckduckbot|baiduspider|applebot|slurp
+    |facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|pinterest) 1;
 }
 
 server {
@@ -82,7 +85,7 @@ server {
   location = /robots.txt  { proxy_pass http://127.0.0.1:8000; }
 
   location / {
-    if ($social_bot) { proxy_pass http://127.0.0.1:8000; break; }
+    if ($crawler) { proxy_pass http://127.0.0.1:8000; break; }
     try_files $uri /index.html;
   }
 }
@@ -113,10 +116,20 @@ server {
 - اسلاگ‌ها از عنوان فارسی با transliteration قطعی ساخته می‌شوند (`server/src/lib/slug.js`)؛ ویرایش
   عنوان، آدرس منتشرشده را تغییر نمی‌دهد.
 - `public/og-image.png` (۱۲۰۰×۶۳۰) تصویر پیش‌فرض اشتراک‌گذاری است؛ صفحات دارای تصویر، تصویر خود را
-  استفاده می‌کنند.
-- `sitemap.xml` و `robots.txt` پویا از API تولید می‌شوند.
-- متاتگ‌های کلاینتی با `src/lib/seo.jsx` و متاتگ‌های crawlerهای شبکه اجتماعی با
-  `server/src/prerender.js` تنظیم می‌شوند.
+  استفاده می‌کنند. همه URLهای canonical، `og:image` و داده‌های ساختاریافته مطلق‌اند.
+- `sitemap.xml` و `robots.txt` پویا از API تولید می‌شوند؛ `robots.txt` مسیرهای `/admin`، `/api/`،
+  `/donate/checkout`، `/donate/result` و `/legal` را مسدود می‌کند.
+- متاتگ‌های کلاینتی با `src/lib/seo.jsx` (شامل Article و BreadcrumbList) و HTML خزنده‌ها با
+  `server/src/prerender.js` ساخته می‌شوند.
+- **خزنده‌ها HTML واقعی می‌گیرند:** `prerender.js` برای هر صفحه عمومی، عنوان، توضیح، H1، متن واقعی
+  پایگاه داده، لینک‌های داخلی و JSON-LD را برمی‌گرداند. صفحات ناشناخته `404` با `noindex` و
+  `/admin` هم `404` می‌گیرند. آدرس‌های تکراری با `301` یکتا می‌شوند:
+  `/legal → /privacy`، `/p/privacy → /privacy`، `/p/terms → /terms` و حذف اسلش انتهایی.
+- در حالت توسعه، Vite همان درخواست‌های خزنده را به API می‌فرستد (`seo-crawler-proxy` در
+  `vite.config.js`)، بنابراین پیش‌نمایش لینک روی پورت عمومی هم درست کار می‌کند. در Production این
+  کار با `map $http_user_agent $crawler` در nginx انجام می‌شود (بخش ۴).
+- برای سنجش Core Web Vitals از خروجی `npm run build` و Lighthouse روی همین دامنه استفاده کنید؛
+  مسیرها به‌صورت lazy بارگذاری می‌شوند و چانک صفحه اول کوچک نگه داشته شده است.
 
 ## ۷. چک‌لیست قبل از انتشار
 

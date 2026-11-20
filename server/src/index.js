@@ -6,7 +6,7 @@ import { publicBaseUrl } from './payments.js'
 import publicRoutes from './routes/public.js'
 import authRoutes from './routes/auth.js'
 import adminRoutes from './routes/admin.js'
-import { socialPreview } from './prerender.js'
+import { crawlerPreview } from './prerender.js'
 import { checkProductionConfig } from './config.js'
 import { pruneRateLimits } from './rate-limit.js'
 
@@ -72,9 +72,15 @@ app.get('/robots.txt', (_req, res) => {
       [
         'User-agent: *',
         'Allow: /',
+        '',
+        '# Private areas and machine endpoints',
         'Disallow: /admin',
+        'Disallow: /api/',
         'Disallow: /donate/checkout',
         'Disallow: /donate/result',
+        'Disallow: /legal',
+        '',
+        '# No crawl-delay: the API rate limits per visitor instead.',
         '',
         `Sitemap: ${publicBaseUrl()}/sitemap.xml`,
         '',
@@ -82,16 +88,21 @@ app.get('/robots.txt', (_req, res) => {
     )
 })
 
-app.get('/sitemap.xml', async (_req, res) => {  const base = publicBaseUrl()
+app.get('/sitemap.xml', async (_req, res) => {
+  const base = publicBaseUrl()
   try {
     const [projects, stories, pages] = await Promise.all([
-      query('SELECT slug FROM projects WHERE is_active = true ORDER BY sort, id'),
+      query('SELECT slug, created_at FROM projects WHERE is_active = true ORDER BY sort, id'),
       query('SELECT slug, published_at FROM stories WHERE is_published = true ORDER BY published_at DESC'),
       query('SELECT slug, updated_at FROM pages WHERE is_published = true'),
     ])
     const urls = [
       ...STATIC_PATHS.map((path) => ({ loc: `${base}${path}`, priority: path === '/' ? '1.0' : '0.8' })),
-      ...projects.rows.map((row) => ({ loc: `${base}/projects/${row.slug}`, priority: '0.7' })),
+      ...projects.rows.map((row) => ({
+        loc: `${base}/projects/${row.slug}`,
+        lastmod: row.created_at?.toISOString?.().slice(0, 10),
+        priority: '0.7',
+      })),
       ...stories.rows.map((row) => ({
         loc: `${base}/stories/${row.slug}`,
         lastmod: row.published_at?.toISOString?.().slice(0, 10),
@@ -125,9 +136,15 @@ ${urls
   }
 })
 
-// Social crawlers get per-page Open Graph tags for the public routes; everyone
-// else (and every search engine) continues to the normal application.
-app.use(socialPreview)
+// Crawlers (search engines and social previews) get per-page HTML for the public
+// routes; browsers continue to the normal application.
+app.use(crawlerPreview)
+
+// JSON endpoints are never search results.
+app.use('/api', (_req, res, next) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+  next()
+})
 
 app.use('/api/auth', authRoutes)
 app.use('/api/admin', adminRoutes)

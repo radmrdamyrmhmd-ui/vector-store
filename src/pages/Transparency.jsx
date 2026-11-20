@@ -6,7 +6,7 @@ import { Breadcrumbs, CtaBand } from '../components/blocks.jsx'
 import { compactMoney, formatDate, money, num } from '../lib/format.js'
 import { ImpactCard } from '../components/cards.jsx'
 import { SampleTag } from '../components/DemoRibbon.jsx'
-import { useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 export default function Transparency() {
   useSeo({
@@ -14,6 +14,18 @@ export default function Transparency() {
     description:
       'گزارش فعالیت، شفافیت مالی و نحوه محاسبه اعداد از پایگاه داده؛ بدون آمار ساختگی.',
     path: '/transparency',
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'گزارش عملکرد و شفافیت',
+        description:
+          'گزارش فعالیت، شفافیت مالی و نحوه محاسبه اعداد از پایگاه داده؛ بدون آمار ساختگی.',
+        path: '/transparency',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'گزارش عملکرد', to: '/transparency' },
+      ])
+    ),
   })
 
   const { data, loading, error } = useResource(() => api('/transparency'), [])

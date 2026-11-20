@@ -3,7 +3,7 @@ import { useSite } from '../lib/site.jsx'
 import { VolunteerForm } from '../components/forms.jsx'
 import { PageHero } from '../components/ui.jsx'
 import { Breadcrumbs, PrivacyNote } from '../components/blocks.jsx'
-import { useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 const AREAS = [
   { icon: BookOpen, title: 'آموزش', text: 'تدریس، کمک آموزشی و همراهی تحصیلی کودکان.' },
@@ -20,6 +20,18 @@ export default function Volunteer() {
     description:
       'ثبت درخواست همکاری داوطلبانه در حوزه‌های آموزش، تولید محتوا، طراحی و پشتیبانی اجرایی.',
     path: '/volunteer',
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'همکاری و داوطلبی',
+        description:
+          'ثبت درخواست همکاری داوطلبانه در حوزه‌های آموزش، تولید محتوا، طراحی و پشتیبانی اجرایی.',
+        path: '/volunteer',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'همکاری و داوطلبی', to: '/volunteer' },
+      ])
+    ),
   })
 
   const { volunteerInterests } = useSite()

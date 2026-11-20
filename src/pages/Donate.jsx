@@ -6,7 +6,7 @@ import { useSettings } from '../lib/site.jsx'
 import DonateWizard from '../components/DonateWizard.jsx'
 import { Notice, PageHero } from '../components/ui.jsx'
 import { Breadcrumbs } from '../components/blocks.jsx'
-import { useSeo, breadcrumbJsonLd } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 export default function Donate() {
   const [params] = useSearchParams()
@@ -18,10 +18,18 @@ export default function Donate() {
     description:
       'انتخاب مبلغ و پروژه برای حمایت از آموزش، توانمندسازی و سلامت زنان و کودکان بلوچ. در این نسخه، پرداخت شبیه‌سازی‌شده است.',
     path: '/donate',
-    jsonLd: breadcrumbJsonLd([
-      { label: 'صفحه اصلی', to: '/' },
-      { label: 'حمایت مالی', to: '/donate' },
-    ]),
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'حمایت مالی',
+        description:
+          'انتخاب مبلغ و پروژه برای حمایت از آموزش، توانمندسازی و سلامت زنان و کودکان بلوچ.',
+        path: '/donate',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'حمایت مالی', to: '/donate' },
+      ])
+    ),
   })
 
   return (

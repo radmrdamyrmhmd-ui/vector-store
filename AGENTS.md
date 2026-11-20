@@ -79,9 +79,18 @@ Other server modules worth knowing:
 
 - `server/src/lib/slug.js` — Persian → ASCII slug transliteration. Slugs are deterministic, and a
   PUT without an explicit slug keeps the current one, so published URLs never move.
-- `server/src/prerender.js` — per-page Open Graph/Twitter tags for social crawlers only (search
-  engines keep getting the SPA shell). Mounted on the API, so a production reverse proxy must send
-  social-bot requests to the API; see `docs/DEPLOYMENT.md`.
+- `server/src/prerender.js` — server-rendered HTML for crawlers (search engines and social
+  previews): title, description, H1, real database text, internal links, canonical, Open Graph and
+  JSON-LD. Unknown routes get `404` + `noindex`; `/admin` gets `404`; duplicate URLs are `301`
+  (`/legal`, `/p/privacy`, `/p/terms`, trailing slash). Mounted on the API, so a production reverse
+  proxy must send crawler requests to the API; see `docs/DEPLOYMENT.md`.
+- `src/lib/seo.jsx` — client-side metadata (`useSeo`) plus the JSON-LD builders (WebSite,
+  Organization, WebPage, Article, BreadcrumbList, ItemList). Never publish registration numbers,
+  addresses or licences for this demonstration project.
+- `vite.config.js` `seo-crawler-proxy` — in dev the Vite server forwards crawler requests to the
+  API, so link previews and crawler HTML work on the public port too.
+- Routes in `src/App.jsx` are lazy-loaded; a new page must be added there with `lazy()` so the
+  first bundle stays small.
 - `server/src/config.js` — `DEMO_MODE`, production password rules and boot-time warnings.
 - Session tokens carry `sv`; `users.session_version` is bumped on a password change, which signs out
   every older session (`/api/auth/me` included).

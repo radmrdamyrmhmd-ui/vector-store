@@ -8,7 +8,7 @@ import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import { ProjectCard } from '../components/cards.jsx'
 import { SampleTag } from '../components/DemoRibbon.jsx'
 import { formatDate, money, num, paragraphs, progressPercent } from '../lib/format.js'
-import { breadcrumbJsonLd, useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 const STATUS_LABELS = {
   active: 'در حال اجرا',
@@ -27,12 +27,20 @@ export default function ProjectDetail() {
     path: `/projects/${slug}`,
     image: project?.image_url || undefined,
     type: 'article',
+    noindex: Boolean(error) || (!loading && !project),
     jsonLd: project
-      ? breadcrumbJsonLd([
-          { label: 'صفحه اصلی', to: '/' },
-          { label: 'پروژه‌های حمایتی', to: '/projects' },
-          { label: project.title, to: `/projects/${project.slug}` },
-        ])
+      ? jsonLdGraph(
+          webPageJsonLd({
+            title: project.title,
+            description: project.meta_description || project.summary,
+            path: `/projects/${project.slug}`,
+          }),
+          breadcrumbJsonLd([
+            { label: 'صفحه اصلی', to: '/' },
+            { label: 'پروژه‌های حمایتی', to: '/projects' },
+            { label: project.title, to: `/projects/${project.slug}` },
+          ])
+        )
       : undefined,
   })
   if (loading) {

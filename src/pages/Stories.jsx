@@ -5,7 +5,7 @@ import { Button, Empty, Notice, PageHero } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import { StoryCard } from '../components/cards.jsx'
 import Reveal from '../components/Reveal.jsx'
-import { useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 export default function Stories() {
   useSeo({
@@ -13,6 +13,19 @@ export default function Stories() {
     description:
       'اخبار، گزارش فعالیت‌ها و مقالات درباره کار خیریه و حمایت از زنان و کودکان.',
     path: '/stories',
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'اخبار و مقالات',
+        description:
+          'اخبار، گزارش فعالیت‌ها و مقالات درباره کار خیریه و حمایت از زنان و کودکان.',
+        path: '/stories',
+        type: 'CollectionPage',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'اخبار و مقالات', to: '/stories' },
+      ])
+    ),
   })
 
   const { data, loading, error } = useResource(() => api('/stories'), [])

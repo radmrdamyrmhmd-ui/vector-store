@@ -6,7 +6,7 @@ import { Empty, Notice, PageHero } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand } from '../components/blocks.jsx'
 import { ProjectCard } from '../components/cards.jsx'
 import Reveal from '../components/Reveal.jsx'
-import { useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 const FILTERS = [
   { key: 'all', label: 'همه پروژه‌ها' },
@@ -20,6 +20,19 @@ export default function Projects() {
     description:
       'فهرست پروژه‌های حمایتی با توضیح هدف، محل اجرا و وضعیت هر پروژه.',
     path: '/projects',
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'پروژه‌های حمایتی همراهان امید',
+        description:
+          'فهرست پروژه‌های حمایتی با توضیح هدف، محل اجرا و وضعیت هر پروژه.',
+        path: '/projects',
+        type: 'CollectionPage',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'پروژه‌های حمایتی', to: '/projects' },
+      ])
+    ),
   })
 
   const { data, loading, error } = useResource(() => api('/projects'), [])

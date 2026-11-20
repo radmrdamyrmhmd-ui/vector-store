@@ -5,7 +5,7 @@ import { Button, PageHero, SectionHead } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import Reveal from '../components/Reveal.jsx'
 import { paragraphs } from '../lib/format.js'
-import { useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 const VALUES = [
   {
@@ -36,6 +36,18 @@ export default function About() {
     description:
       'معرفی بنیاد همراهان امید، ارزش‌ها و رویکرد کار با جامعه محلی در حمایت از زنان و کودکان بلوچ (نمونه‌کار نمایشی).',
     path: '/about',
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'درباره بنیاد همراهان امید',
+        description:
+          'معرفی بنیاد همراهان امید، ارزش‌ها و رویکرد کار با جامعه محلی در حمایت از زنان و کودکان بلوچ.',
+        path: '/about',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'درباره ما', to: '/about' },
+      ])
+    ),
   })
 
   const settings = useSettings()

@@ -1,11 +1,11 @@
-import { useParams } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { useResource } from '../lib/useResource.js'
 import { Breadcrumbs } from '../components/blocks.jsx'
 import RichText from '../components/RichText.jsx'
 import { Button, Empty, Notice, PageHero } from '../components/ui.jsx'
 import { formatDate } from '../lib/format.js'
-import { breadcrumbJsonLd, useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 /**
  * Renders a page stored in the `pages` table, so privacy, terms and any page an
@@ -17,16 +17,34 @@ export default function PageView({ slug: fixedSlug, eyebrow = 'اطلاعات ح
   const { data: page, loading, error } = useResource(() => api(`/pages/${slug}`), [slug])
 
   useSeo({
-    title: page?.meta_title || page?.title || 'صفحه',
+    title: page?.meta_title || page?.title,
     description: page?.meta_description || page?.subtitle || undefined,
     path: fixedSlug === 'privacy' ? '/privacy' : fixedSlug === 'terms' ? '/terms' : `/p/${slug}`,
+    noindex: Boolean(error) || (!loading && !page),
     jsonLd: page
-      ? breadcrumbJsonLd([
-          { label: 'صفحه اصلی', to: '/' },
-          { label: page.title, to: `/p/${page.slug}` },
-        ])
+      ? jsonLdGraph(
+          webPageJsonLd({
+            title: page.meta_title || page.title,
+            description: page.meta_description || page.subtitle,
+            path:
+              fixedSlug === 'privacy'
+                ? '/privacy'
+                : fixedSlug === 'terms'
+                  ? '/terms'
+                  : `/p/${page.slug}`,
+          }),
+          breadcrumbJsonLd([
+            { label: 'صفحه اصلی', to: '/' },
+            { label: page.title, to: `/p/${page.slug}` },
+          ])
+        )
       : undefined,
   })
+
+  // The legal pages have their own routes; /p/privacy would be a duplicate URL.
+  if (!fixedSlug && (slug === 'privacy' || slug === 'terms')) {
+    return <Navigate to={`/${slug}`} replace />
+  }
 
   if (loading) {
     return (

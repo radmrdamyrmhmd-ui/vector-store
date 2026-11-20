@@ -21,6 +21,8 @@ export default function StoryDetail() {
     path: `/stories/${slug}`,
     image: story?.image_url || undefined,
     type: 'article',
+    publishedAt: story?.published_at || undefined,
+    noindex: Boolean(error) || (!loading && !story),
     jsonLd: story
       ? {
           '@context': 'https://schema.org',

@@ -3,7 +3,7 @@ import { useSettings } from '../lib/site.jsx'
 import { ContactForm } from '../components/forms.jsx'
 import { PageHero } from '../components/ui.jsx'
 import { Breadcrumbs } from '../components/blocks.jsx'
-import { useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 export default function Contact() {
   useSeo({
@@ -11,6 +11,18 @@ export default function Contact() {
     description:
       'راه‌های تماس با مجموعه، فرم پیام و پاسخ به پرسش‌های رایج (نمونه‌کار نمایشی).',
     path: '/contact',
+    jsonLd: jsonLdGraph(
+      webPageJsonLd({
+        title: 'تماس با ما',
+        description: 'راه‌های تماس با مجموعه، فرم پیام و پاسخ به پرسش‌های رایج.',
+        path: '/contact',
+        type: 'ContactPage',
+      }),
+      breadcrumbJsonLd([
+        { label: 'صفحه اصلی', to: '/' },
+        { label: 'تماس با ما', to: '/contact' },
+      ])
+    ),
   })
 
   const settings = useSettings()

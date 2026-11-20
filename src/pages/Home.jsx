@@ -16,7 +16,7 @@ import { ActivityCard, ProjectCard, StoryCard } from '../components/cards.jsx'
 import { NewsletterForm } from '../components/forms.jsx'
 import Reveal from '../components/Reveal.jsx'
 import { compactMoney, formatDate, num, paragraphs } from '../lib/format.js'
-import { useSeo } from '../lib/seo.jsx'
+import { organizationJsonLd, useSeo, websiteJsonLd } from '../lib/seo.jsx'
 
 function Hero() {
   const settings = useSettings()
@@ -68,6 +68,7 @@ function Hero() {
               alt="فضای آموزش و همراهی با کودکان بلوچ"
               ratio="aspect-[5/4]"
               className="shadow-lift"
+              priority
             />
             <div className="absolute -bottom-6 right-4 left-4 hidden rounded-2xl border border-line bg-white/95 px-5 py-4 shadow-soft backdrop-blur sm:block sm:left-auto sm:right-6 sm:w-60">
               <div className="flex items-center gap-2 text-[11px] text-muted">
@@ -387,6 +388,7 @@ export default function Home() {
     description:
       'نمونه‌کار وب‌سایت خیریه همراهان امید: آموزش، توانمندسازی و حمایت از زنان و کودکان بلوچ.',
     path: '/',
+    jsonLd: [websiteJsonLd(), organizationJsonLd()],
   })
 
   return (

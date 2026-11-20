@@ -6,7 +6,7 @@ import { Artwork } from '../components/Art.jsx'
 import { Button, Empty, Notice, SectionHead } from '../components/ui.jsx'
 import { Breadcrumbs, CtaBand, PrivacyNote } from '../components/blocks.jsx'
 import { paragraphs } from '../lib/format.js'
-import { breadcrumbJsonLd, useSeo } from '../lib/seo.jsx'
+import { breadcrumbJsonLd, jsonLdGraph, useSeo, webPageJsonLd } from '../lib/seo.jsx'
 
 const ICONS = {
   book: BookOpen,
@@ -27,12 +27,20 @@ export default function ActivityDetail() {
     description: activity?.summary || undefined,
     path: `/activities/${slug}`,
     image: activity?.image_url || undefined,
+    noindex: Boolean(error) || (!loading && !activity),
     jsonLd: activity
-      ? breadcrumbJsonLd([
-          { label: 'صفحه اصلی', to: '/' },
-          { label: 'حوزه‌های فعالیت', to: '/activities' },
-          { label: activity.title, to: `/activities/${activity.slug}` },
-        ])
+      ? jsonLdGraph(
+          webPageJsonLd({
+            title: activity.title,
+            description: activity.summary,
+            path: `/activities/${activity.slug}`,
+          }),
+          breadcrumbJsonLd([
+            { label: 'صفحه اصلی', to: '/' },
+            { label: 'حوزه‌های فعالیت', to: '/activities' },
+            { label: activity.title, to: `/activities/${activity.slug}` },
+          ])
+        )
       : undefined,
   })
   if (loading) {
